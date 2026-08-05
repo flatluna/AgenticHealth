@@ -261,6 +261,53 @@ public sealed class VoiceToolsFunction
         });
     }
 
+    public sealed record DeleteMealRequest(int MealId);
+
+    [Function("VoiceToolDeleteMeal")]
+    public async Task<HttpResponseData> DeleteMealAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "voice/tools/delete-meal")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null || _personProvider is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(
+                request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        DeleteMealRequest? body;
+        try
+        {
+            body = await JsonSerializer.DeserializeAsync<DeleteMealRequest>(request.Body, JsonOptions, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Cuerpo de solicitud inválido.", HttpStatusCode.BadRequest);
+        }
+
+        if (body is null || body.MealId <= 0)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Falta el identificador de la comida.", HttpStatusCode.BadRequest);
+        }
+
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var deletedRows = await db.MealLogs
+            .Where(m => m.Id == body.MealId && m.PersonId == personId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (deletedRows == 0)
+        {
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new
+            {
+                confirmation = "No encontré esa comida registrada; puede que ya se haya borrado.",
+            });
+        }
+
+        return await FunctionResponseFactory.SuccessResponseAsync(request, new { confirmation = "Listo, borré ese registro de comida." });
+    }
+
     public sealed record AskAdvisorRequest(string Question, string? UserName);
 
     [Function("VoiceToolAskAdvisor")]

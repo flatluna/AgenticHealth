@@ -76,3 +76,16 @@ export async function executeGetRecentMealsTool(daysBack?: number): Promise<{ re
   );
   return data;
 }
+
+/**
+ * Executes the "delete_meal" Realtime tool - deletes a previously logged meal by ID
+ * (obtained from "get_recent_meals"), same as the Alimentos page's delete action.
+ */
+export async function executeDeleteMealTool(mealId: number): Promise<{ confirmation: string }> {
+  const { data } = await apiClient.post<{ confirmation: string }>(
+    '/voice/tools/delete-meal',
+    { mealId },
+    { timeout: 15000 },
+  );
+  return data;
+}

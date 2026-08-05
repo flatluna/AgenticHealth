@@ -91,6 +91,15 @@ public sealed class VoiceChatSessionFunction
           corriste 30 minutos?"). Solo cuando confirme afirmativamente, llama a
           "log_exercise" - nunca lo registres en el mismo turno en que lo menciona. Después
           de registrarlo, confirma brevemente en voz (ej. "Listo, lo registré").
+        - Cuando el usuario pida borrar/eliminar una comida ya registrada (ej. "borra el
+          desayuno de hoy", "elimina la manzana que registré ayer"), primero di en voz una
+          frase corta de espera (ej. "Dame un segundo, busco ese registro…") y llama a
+          "get_recent_meals" para encontrar la comida y su ID exacto - nunca inventes un ID.
+          Dile en voz cuál encontraste (ej. "Encontré tu desayuno de hoy: huevos con jamón,
+          350 kcal, ¿confirmo que lo borro?") y espera su confirmación explícita antes de
+          llamar a "delete_meal" con ese ID - nunca borres en el mismo turno en que lo pide.
+          Si no encuentras una coincidencia clara, dile que no la encontraste en vez de
+          adivinar. Después de borrarlo, confirma brevemente en voz (ej. "Listo, lo borré").
         - No eres un médico: para condiciones médicas serias, recomienda consultar a un
           profesional de la salud.
         - Empieza la conversación con un saludo breve y natural, preguntando en qué puedes
@@ -318,6 +327,29 @@ public sealed class VoiceChatSessionFunction
             }
         };
 
-        return new JsonArray(searchFoodTool, logMealTool, getRecentMealsTool, askHealthAdvisorTool, logExerciseTool);
+        var deleteMealTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "delete_meal",
+            ["description"] = "Borra una comida ya registrada del historial del usuario, dado su ID. El ID debe " +
+                "obtenerse primero llamando a 'get_recent_meals' y encontrando la comida correcta - nunca inventes " +
+                "un ID. SOLO debe llamarse después de que el usuario haya confirmado explícitamente que quiere " +
+                "borrarla.",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["mealId"] = new JsonObject
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "El ID de la comida a borrar, obtenido de 'get_recent_meals' (ej. '[ID 42]')."
+                    }
+                },
+                ["required"] = new JsonArray("mealId")
+            }
+        };
+
+        return new JsonArray(searchFoodTool, logMealTool, getRecentMealsTool, askHealthAdvisorTool, logExerciseTool, deleteMealTool);
     }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, PhoneOff, Sparkles, AlertCircle } from 'lucide-react';
-import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool, executeGetRecentMealsTool, executeLogExerciseTool } from '../api/voiceApi';
+import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool, executeGetRecentMealsTool, executeLogExerciseTool, executeDeleteMealTool } from '../api/voiceApi';
 
 type VoiceState = 'idle' | 'connecting' | 'connected' | 'listening' | 'speaking' | 'error';
 
@@ -32,6 +32,7 @@ export function VoiceChatAgent({
   onAssistantTranscript,
   onMealLogged,
   onExerciseLogged,
+  onMealDeleted,
   onClose,
   autoConnect = false,
   compact = false,
@@ -43,6 +44,8 @@ export function VoiceChatAgent({
   onMealLogged?: (confirmation: string) => void;
   /** Fired right after "log_exercise" tool executes successfully, with the confirmation text. */
   onExerciseLogged?: (confirmation: string) => void;
+  /** Fired right after "delete_meal" tool executes successfully, with the confirmation text. */
+  onMealDeleted?: (confirmation: string) => void;
   onClose?: () => void;
   /** Starts the call immediately on mount instead of waiting for a click on the orb. */
   autoConnect?: boolean;
@@ -147,13 +150,19 @@ export function VoiceChatAgent({
           onExerciseLogged?.(confirmation);
           return JSON.stringify({ confirmation });
         }
+        if (toolName === 'delete_meal') {
+          const mealId = typeof args.mealId === 'number' ? args.mealId : Number(args.mealId);
+          const { confirmation } = await executeDeleteMealTool(mealId);
+          onMealDeleted?.(confirmation);
+          return JSON.stringify({ confirmation });
+        }
         return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
       } catch (err) {
         console.error(`VoiceChatAgent: tool "${toolName}" failed`, err);
         return JSON.stringify({ error: 'La herramienta falló al ejecutarse.' });
       }
     },
-    [onMealLogged, onExerciseLogged, userName],
+    [onMealLogged, onExerciseLogged, onMealDeleted, userName],
   );
 
   const connect = useCallback(async () => {

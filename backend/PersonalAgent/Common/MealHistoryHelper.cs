@@ -34,7 +34,7 @@ public static class MealHistoryHelper
         var lines = meals.Select(m =>
         {
             var local = TimeZoneInfo.ConvertTimeFromUtc(m.RecordedAtUtc, MealTimeHelper.Central);
-            var line = $"- {local:yyyy-MM-dd HH:mm} ({m.MealType}): {m.Description}" +
+            var line = $"- [ID {m.Id}] {local:yyyy-MM-dd HH:mm} ({m.MealType}): {m.Description}" +
                 (string.IsNullOrWhiteSpace(m.ServingSize) ? "" : $" · {m.ServingSize}") +
                 $" · {m.Calories?.ToString("0") ?? "?"} kcal, {m.ProteinGrams?.ToString("0.0") ?? "?"}g prot, " +
                 $"{m.CarbsGrams?.ToString("0.0") ?? "?"}g carb, {m.FatGrams?.ToString("0.0") ?? "?"}g grasa, " +
