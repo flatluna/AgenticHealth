@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overscroll-behavior-y: none;
+}
+
+/* Theme system (light default / dark / "azul elegante") - components read these via
+   Tailwind arbitrary values, e.g. bg-[var(--app-bg)]. Same palette as the main suite app. */
+:root,
+[data-theme="light"] {
+  --app-bg: #f8fafc;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --hover-bg: #f1f5f9;
+  --input-border: #cbd5e1;
+  --accent: #9333ea;
+  --accent-hover: #7e22ce;
+  --accent-soft: #f3e8ff;
+  --accent-text: #7e22ce;
+  --accent-border: #e9d5ff;
+  --brand-from: #a855f7;
+  --brand-to: #6366f1;
+}
+
+[data-theme="dark"] {
+  --app-bg: #0b1120;
+  --card-bg: #16213a;
+  --card-border: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --hover-bg: rgba(148, 163, 184, 0.08);
+  --input-border: #334155;
+  --accent: #a78bfa;
+  --accent-hover: #8b5cf6;
+  --accent-soft: rgba(168, 85, 247, 0.18);
+  --accent-text: #e9d5ff;
+  --accent-border: rgba(168, 85, 247, 0.35);
+  --brand-from: #c084fc;
+  --brand-to: #818cf8;
+}
+
+@keyframes voice-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes voice-pulse-ring {
+  0% { transform: scale(0.85); opacity: 0.55; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@keyframes voice-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.voice-orbit-ring {
+  animation: voice-orbit 5s linear infinite;
+}
+
+.voice-pulse-ring {
+  animation: voice-pulse-ring 2s ease-out infinite;
+}
+
+.voice-breathe {
+  animation: voice-breathe 2.4s ease-in-out infinite;
+}
