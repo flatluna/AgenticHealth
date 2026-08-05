@@ -41,6 +41,15 @@ export async function executeSearchFoodTool(foodDescription: string): Promise<{ 
 }
 
 /**
+ * Executes the "log_exercise" Realtime tool on behalf of the browser - writes to the
+ * same ExerciseLogs table the Ejercicios page and text chat use.
+ */
+export async function executeLogExerciseTool(args: Record<string, unknown>): Promise<{ confirmation: string }> {
+  const { data } = await apiClient.post<{ confirmation: string }>('/voice/tools/log-exercise', args, { timeout: 15000 });
+  return data;
+}
+
+/**
  * Executes the "ask_health_advisor" Realtime tool - forwards the question to the same
  * AdvisorAgent the text chat uses, so voice mode can answer grounded in the user's real
  * meal/exercise/weight/goals history instead of having zero context.

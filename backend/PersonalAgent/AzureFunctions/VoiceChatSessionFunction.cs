@@ -85,6 +85,12 @@ public sealed class VoiceChatSessionFunction
           tarda unos segundos, así que nunca te quedes callado mientras esperas. Cuando
           tengas el resultado, respóndele en voz de forma breve y natural basándote en lo
           que te devolvió la herramienta - nunca inventes datos de su historial.
+        - Cuando el usuario diga que hizo ejercicio (ej. "corrí 30 minutos", "hice pesas una
+          hora"), pregúntale lo esencial que falte (duración, y opcionalmente calorías si
+          no las sabes estimar) y confírmale en voz qué vas a registrar (ej. "¿Registro que
+          corriste 30 minutos?"). Solo cuando confirme afirmativamente, llama a
+          "log_exercise" - nunca lo registres en el mismo turno en que lo menciona. Después
+          de registrarlo, confirma brevemente en voz (ej. "Listo, lo registré").
         - No eres un médico: para condiciones médicas serias, recomienda consultar a un
           profesional de la salud.
         - Empieza la conversación con un saludo breve y natural, preguntando en qué puedes
@@ -275,6 +281,43 @@ public sealed class VoiceChatSessionFunction
             }
         };
 
-        return new JsonArray(searchFoodTool, logMealTool, getRecentMealsTool, askHealthAdvisorTool);
+        var logExerciseTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "log_exercise",
+            ["description"] = "Registra un ejercicio/actividad física realizada por el usuario en su historial " +
+                "(base de datos). SOLO debe llamarse después de que el usuario haya confirmado explícitamente que " +
+                "quiere agregarlo a su registro - nunca en el mismo turno en que reporta el ejercicio.",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["description"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Descripción breve, ej. 'correr', 'pesas - pecho y tríceps', 'nadar'."
+                    },
+                    ["durationMinutes"] = new JsonObject
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Duración en minutos."
+                    },
+                    ["caloriesBurned"] = new JsonObject
+                    {
+                        ["type"] = "number",
+                        ["description"] = "Calorías quemadas estimadas, si se conocen o pueden estimarse."
+                    },
+                    ["recordedAtIso"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Hora en que se realizó, ISO 8601 (ej. '2026-08-05T07:30:00'). Si se omite, se usa la hora actual."
+                    }
+                },
+                ["required"] = new JsonArray("description", "durationMinutes")
+            }
+        };
+
+        return new JsonArray(searchFoodTool, logMealTool, getRecentMealsTool, askHealthAdvisorTool, logExerciseTool);
     }
 }

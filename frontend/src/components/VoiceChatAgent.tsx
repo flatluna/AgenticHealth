@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, PhoneOff, Sparkles, AlertCircle } from 'lucide-react';
-import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool, executeGetRecentMealsTool } from '../api/voiceApi';
+import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool, executeGetRecentMealsTool, executeLogExerciseTool } from '../api/voiceApi';
 
 type VoiceState = 'idle' | 'connecting' | 'connected' | 'listening' | 'speaking' | 'error';
 
@@ -31,6 +31,7 @@ export function VoiceChatAgent({
   onUserTranscript,
   onAssistantTranscript,
   onMealLogged,
+  onExerciseLogged,
   onClose,
   autoConnect = false,
   compact = false,
@@ -40,6 +41,8 @@ export function VoiceChatAgent({
   onAssistantTranscript?: (text: string) => void;
   /** Fired right after "log_meal" tool executes successfully, with the confirmation text. */
   onMealLogged?: (confirmation: string) => void;
+  /** Fired right after "log_exercise" tool executes successfully, with the confirmation text. */
+  onExerciseLogged?: (confirmation: string) => void;
   onClose?: () => void;
   /** Starts the call immediately on mount instead of waiting for a click on the orb. */
   autoConnect?: boolean;
@@ -139,13 +142,18 @@ export function VoiceChatAgent({
           const { result } = await executeGetRecentMealsTool(daysBack);
           return JSON.stringify({ result });
         }
+        if (toolName === 'log_exercise') {
+          const { confirmation } = await executeLogExerciseTool(args);
+          onExerciseLogged?.(confirmation);
+          return JSON.stringify({ confirmation });
+        }
         return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
       } catch (err) {
         console.error(`VoiceChatAgent: tool "${toolName}" failed`, err);
         return JSON.stringify({ error: 'La herramienta falló al ejecutarse.' });
       }
     },
-    [onMealLogged, userName],
+    [onMealLogged, onExerciseLogged, userName],
   );
 
   const connect = useCallback(async () => {

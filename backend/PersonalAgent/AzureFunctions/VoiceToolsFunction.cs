@@ -211,6 +211,56 @@ public sealed class VoiceToolsFunction
         return await FunctionResponseFactory.SuccessResponseAsync(request, new { result = summary });
     }
 
+    public sealed record LogExerciseRequest(string Description, int DurationMinutes, double? CaloriesBurned, string? RecordedAtIso);
+
+    [Function("VoiceToolLogExercise")]
+    public async Task<HttpResponseData> LogExerciseAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "voice/tools/log-exercise")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null || _personProvider is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(
+                request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        LogExerciseRequest? body;
+        try
+        {
+            body = await JsonSerializer.DeserializeAsync<LogExerciseRequest>(request.Body, JsonOptions, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Cuerpo de solicitud inválido.", HttpStatusCode.BadRequest);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Description) || body.DurationMinutes <= 0)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Falta la descripción o la duración del ejercicio.", HttpStatusCode.BadRequest);
+        }
+
+        var recordedAt = DateTime.TryParse(body.RecordedAtIso, out var parsed) ? parsed.ToUniversalTime() : DateTime.UtcNow;
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        db.ExerciseLogs.Add(new ExerciseLog
+        {
+            PersonId = personId,
+            Description = body.Description.Trim(),
+            DurationMinutes = body.DurationMinutes,
+            CaloriesBurned = body.CaloriesBurned,
+            RecordedAtUtc = recordedAt,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return await FunctionResponseFactory.SuccessResponseAsync(request, new
+        {
+            confirmation = $"Registrado: {body.Description} ({body.DurationMinutes} min" +
+                (body.CaloriesBurned is { } kcal ? $", {kcal:0} kcal quemadas" : string.Empty) + ").",
+        });
+    }
+
     public sealed record AskAdvisorRequest(string Question, string? UserName);
 
     [Function("VoiceToolAskAdvisor")]
