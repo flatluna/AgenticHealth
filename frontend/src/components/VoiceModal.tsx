@@ -1,11 +1,13 @@
 import { VoiceChatAgent } from './VoiceChatAgent';
 import { useChatWidget } from '../contexts/ChatWidgetContext';
+import { useAuth } from '../contexts/AuthContext';
 
 /** Small persistent voice-call modal, bottom-left so it never overlaps the text chat
  * panel/FAB (bottom-right). Auto-connects the moment it appears - a single click on
  * ChatPanel's mic button is enough to start talking, no second click needed. */
 export function VoiceModal() {
   const { isVoiceActive, addMessage, setVoiceActive } = useChatWidget();
+  const { user } = useAuth();
 
   if (!isVoiceActive) {
     return null;
@@ -16,6 +18,7 @@ export function VoiceModal() {
       <VoiceChatAgent
         autoConnect
         compact
+        userName={user?.displayName}
         onUserTranscript={(text) => addMessage('user', text)}
         onAssistantTranscript={(text) => addMessage('assistant', text)}
         onClose={() => setVoiceActive(false)}

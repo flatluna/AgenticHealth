@@ -34,6 +34,7 @@ export function VoiceChatAgent({
   onClose,
   autoConnect = false,
   compact = false,
+  userName,
 }: {
   onUserTranscript?: (text: string) => void;
   onAssistantTranscript?: (text: string) => void;
@@ -44,6 +45,8 @@ export function VoiceChatAgent({
   autoConnect?: boolean;
   /** Smaller orb/spacing, used inside the small left-side voice modal. */
   compact?: boolean;
+  /** Authenticated user's display name, so the voice agent knows who it's talking to. */
+  userName?: string | null;
 }) {
   const [state, setState] = useState<VoiceState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -128,7 +131,7 @@ export function VoiceChatAgent({
         }
         if (toolName === 'ask_health_advisor') {
           const question = (args.question as string) ?? '';
-          const { result } = await executeAskAdvisorTool(question);
+          const { result } = await executeAskAdvisorTool(question, userName);
           return JSON.stringify({ result });
         }
         if (toolName === 'get_recent_meals') {
@@ -142,7 +145,7 @@ export function VoiceChatAgent({
         return JSON.stringify({ error: 'La herramienta falló al ejecutarse.' });
       }
     },
-    [onMealLogged],
+    [onMealLogged, userName],
   );
 
   const connect = useCallback(async () => {
@@ -150,7 +153,7 @@ export function VoiceChatAgent({
     setState('connecting');
     handledToolCallIdsRef.current.clear();
     try {
-      const session = await requestVoiceChatSession();
+      const session = await requestVoiceChatSession(userName);
 
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },

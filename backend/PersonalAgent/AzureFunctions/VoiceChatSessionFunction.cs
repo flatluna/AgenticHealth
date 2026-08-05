@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -23,6 +24,8 @@ namespace PersonalAgent.AzureFunctions;
 /// </summary>
 public sealed class VoiceChatSessionFunction
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private const string Instructions = """
         Eres el asistente personal de salud de AgenticHealth, hablando por voz en tiempo
         real con el usuario. Hablas español de forma natural, cálida y conversacional.
@@ -104,6 +107,8 @@ public sealed class VoiceChatSessionFunction
         string Voice,
         long? ExpiresAtUnixSeconds);
 
+    public sealed record VoiceSessionRequest(string? UserName);
+
     [Function("VoiceChatSession")]
     public async Task<HttpResponseData> RunAsync(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "voice/session")]
@@ -118,10 +123,24 @@ public sealed class VoiceChatSessionFunction
                 HttpStatusCode.ServiceUnavailable);
         }
 
+        VoiceSessionRequest? body = null;
+        try
+        {
+            body = await JsonSerializer.DeserializeAsync<VoiceSessionRequest>(request.Body, JsonOptions, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            // Body is optional (older clients post null) - just proceed without a user name.
+        }
+
         try
         {
             var tools = BuildTools();
-            var session = await _voiceSessionService.CreateEphemeralSessionAsync(Instructions, cancellationToken, tools);
+            var instructions = string.IsNullOrWhiteSpace(body?.UserName)
+                ? Instructions
+                : $"{Instructions}\n\nEl usuario que te habla se llama {body.UserName}. Si te pregunta cómo se " +
+                  "llama o te saluda, usa su nombre directamente sin decir que no lo sabes.";
+            var session = await _voiceSessionService.CreateEphemeralSessionAsync(instructions, cancellationToken, tools);
 
             return await FunctionResponseFactory.SuccessResponseAsync(
                 request,

@@ -15,8 +15,8 @@ export interface VoiceChatSession {
 }
 
 /** Mints a short-lived Azure OpenAI Realtime ephemeral session for voice chat mode. */
-export async function requestVoiceChatSession(): Promise<VoiceChatSession> {
-  const { data } = await apiClient.post<VoiceChatSession>('/voice/session', null, { timeout: 30000 });
+export async function requestVoiceChatSession(userName?: string | null): Promise<VoiceChatSession> {
+  const { data } = await apiClient.post<VoiceChatSession>('/voice/session', { userName }, { timeout: 30000 });
   return data;
 }
 
@@ -45,10 +45,10 @@ export async function executeSearchFoodTool(foodDescription: string): Promise<{ 
  * AdvisorAgent the text chat uses, so voice mode can answer grounded in the user's real
  * meal/exercise/weight/goals history instead of having zero context.
  */
-export async function executeAskAdvisorTool(question: string): Promise<{ result: string }> {
+export async function executeAskAdvisorTool(question: string, userName?: string | null): Promise<{ result: string }> {
   const { data } = await apiClient.post<{ result: string }>(
     '/voice/tools/ask-advisor',
-    { question },
+    { question, userName },
     { timeout: 30000 },
   );
   return data;

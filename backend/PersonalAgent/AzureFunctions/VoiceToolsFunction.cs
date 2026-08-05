@@ -211,7 +211,7 @@ public sealed class VoiceToolsFunction
         return await FunctionResponseFactory.SuccessResponseAsync(request, new { result = summary });
     }
 
-    public sealed record AskAdvisorRequest(string Question);
+    public sealed record AskAdvisorRequest(string Question, string? UserName);
 
     [Function("VoiceToolAskAdvisor")]
     public async Task<HttpResponseData> AskAdvisorAsync(
@@ -244,7 +244,7 @@ public sealed class VoiceToolsFunction
 
         try
         {
-            var answer = await _advisorAgent.AskAsync(body.Question, cancellationToken: cancellationToken);
+            var answer = await _advisorAgent.AskAsync(body.Question, body.UserName, cancellationToken);
             return await FunctionResponseFactory.SuccessResponseAsync(request, new { result = answer });
         }
         catch (Exception ex)
