@@ -63,7 +63,8 @@ public sealed class VoiceToolsFunction
         double? IronMilligrams,
         double? MagnesiumMilligrams,
         double? VitaminAMicrograms,
-        string? ConsumedAtIso);
+        string? ConsumedAtIso,
+        string? SourceBreakdown);
 
     [Function("VoiceToolLogMeal")]
     public async Task<HttpResponseData> LogMealAsync(
@@ -93,7 +94,7 @@ public sealed class VoiceToolsFunction
         }
 
         var parsedMealType = Enum.TryParse<MealType>(body.MealType, ignoreCase: true, out var mt) ? mt : MealType.Snack;
-        var recordedAt = DateTime.TryParse(body.ConsumedAtIso, out var parsed) ? parsed.ToUniversalTime() : DateTime.UtcNow;
+        var recordedAt = MealTimeHelper.ParseCentralOrUtcToUtc(body.ConsumedAtIso, DateTime.UtcNow);
 
         var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
 
@@ -118,12 +119,15 @@ public sealed class VoiceToolsFunction
             MagnesiumMilligrams = body.MagnesiumMilligrams,
             VitaminAMicrograms = body.VitaminAMicrograms,
             RecordedAtUtc = recordedAt,
+            SourceBreakdown = string.IsNullOrWhiteSpace(body.SourceBreakdown)
+                ? $"{body.Description}: {body.Calories?.ToString("0") ?? "?"} kcal (fuente no especificada)"
+                : body.SourceBreakdown,
         });
         await db.SaveChangesAsync(cancellationToken);
 
         return await FunctionResponseFactory.SuccessResponseAsync(request, new
         {
-            confirmation = $"Registrado: {body.Description} ({parsedMealType}, {body.Calories?.ToString("0") ?? "?"} kcal) a las {recordedAt:HH:mm} UTC.",
+            confirmation = $"Registrado: {body.Description} ({parsedMealType}, {body.Calories?.ToString("0") ?? "?"} kcal) a las {TimeZoneInfo.ConvertTimeFromUtc(recordedAt, MealTimeHelper.Central):HH:mm}.",
         });
     }
 
@@ -174,6 +178,37 @@ public sealed class VoiceToolsFunction
                 result = "La búsqueda falló; estima los valores nutricionales con tu propio conocimiento.",
             });
         }
+    }
+
+    public sealed record GetRecentMealsRequest(int? DaysBack);
+
+    [Function("VoiceToolGetRecentMeals")]
+    public async Task<HttpResponseData> GetRecentMealsAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "voice/tools/get-recent-meals")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null || _personProvider is null)
+        {
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new
+            {
+                result = "No se pudo consultar el historial: la base de datos no está configurada.",
+            });
+        }
+
+        GetRecentMealsRequest? body;
+        try
+        {
+            body = await JsonSerializer.DeserializeAsync<GetRecentMealsRequest>(request.Body, JsonOptions, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            body = new GetRecentMealsRequest(null);
+        }
+
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var summary = await MealHistoryHelper.GetRecentMealsSummaryAsync(_dbContextFactory, personId, body?.DaysBack, cancellationToken);
+        return await FunctionResponseFactory.SuccessResponseAsync(request, new { result = summary });
     }
 
     public sealed record AskAdvisorRequest(string Question);

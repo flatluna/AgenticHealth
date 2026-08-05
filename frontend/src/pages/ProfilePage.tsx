@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { apiBaseUrl } from '../config/api';
+import { COUNTRIES } from '../data/countries';
 
 export function ProfilePage() {
   const { user } = useAuth();
@@ -14,7 +16,7 @@ export function ProfilePage() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const response = await fetch('/api/auth/profile', {
+        const response = await fetch(`${apiBaseUrl}/auth/profile`, {
           headers: { 'x-msal-user': user?.azureObjectId ?? '' },
         });
         if (!response.ok) {
@@ -40,7 +42,7 @@ export function ProfilePage() {
 
   const handleSave = async () => {
     try {
-      const response = await fetch('/api/auth/profile', {
+      const response = await fetch(`${apiBaseUrl}/auth/profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-msal-user': user?.azureObjectId ?? '' },
         body: JSON.stringify({ bio, city, country, preferredFocus, timezone, wantsWellnessTips }),
@@ -88,7 +90,12 @@ export function ProfilePage() {
           </label>
           <label className="text-sm text-[var(--text-secondary)]">
             <span className="mb-1 block">País</span>
-            <input className="w-full rounded-xl border border-[var(--card-border)] px-3 py-2" value={country} onChange={(e) => setCountry(e.target.value)} />
+            <select className="w-full rounded-xl border border-[var(--card-border)] px-3 py-2" value={country} onChange={(e) => setCountry(e.target.value)}>
+              <option value="">Selecciona un país</option>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </label>
           <label className="text-sm text-[var(--text-secondary)]">
             <span className="mb-1 block">Foco de bienestar</span>

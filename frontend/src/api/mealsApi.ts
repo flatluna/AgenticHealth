@@ -24,6 +24,7 @@ export interface Meal {
   ironMilligrams: number | null;
   magnesiumMilligrams: number | null;
   vitaminAMicrograms: number | null;
+  sourceBreakdown: string | null;
   recordedAtUtc: string;
 }
 

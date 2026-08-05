@@ -169,7 +169,7 @@ export function GoalsPage() {
               onChange={(e) => setGoalsText(e.target.value)}
               placeholder="Ej. Quiero bajar 10 kg en los próximos 3 meses sin perder músculo, y empezar a hacer ejercicio 3 veces por semana."
               rows={4}
-              className="mt-3 w-full rounded-lg border border-[var(--input-border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+              className="mt-3 w-full rounded-lg border border-[var(--input-border)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
               required
             />
           </div>

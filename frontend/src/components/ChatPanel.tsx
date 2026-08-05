@@ -1,27 +1,18 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { Mic } from 'lucide-react';
+import { Mic, X } from 'lucide-react';
 import { askAgent } from '../api/agentApi';
-import { VoiceChatAgent } from './VoiceChatAgent';
 import { AgentIcon } from './AgentIcon';
-
-interface ChatMessage {
-  id: number;
-  role: 'user' | 'assistant';
-  text: string;
-}
-
-let nextId = 1;
+import { useChatWidget } from '../contexts/ChatWidgetContext';
 
 const SESSION_STORAGE_KEY = 'personal-agent-session-id';
 
-export function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: nextId++,
-      role: 'assistant',
-      text: 'Hola 👋 Soy tu asistente personal. Puedo ayudarte con dietas, conteo de calorías, ejercicio y preguntas generales.',
-    },
-  ]);
+interface ChatPanelProps {
+  /** When provided, renders a close button in the header - used by the floating widget shell. */
+  onClose?: () => void;
+}
+
+export function ChatPanel({ onClose }: ChatPanelProps = {}) {
+  const { messages, addMessage, isVoiceActive, setVoiceActive } = useChatWidget();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +21,6 @@ export function ChatPanel() {
   const [sessionId, setSessionId] = useState<string | null>(() =>
     sessionStorage.getItem(SESSION_STORAGE_KEY),
   );
-  const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,7 +34,7 @@ export function ChatPanel() {
       return;
     }
 
-    setMessages((prev) => [...prev, { id: nextId++, role: 'user', text: trimmed }]);
+    addMessage('user', trimmed);
     setInput('');
     setIsLoading(true);
     setError(null);
@@ -53,7 +43,7 @@ export function ChatPanel() {
       const { reply, sessionId: newSessionId } = await askAgent(trimmed, sessionId);
       setSessionId(newSessionId);
       sessionStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
-      setMessages((prev) => [...prev, { id: nextId++, role: 'assistant', text: reply }]);
+      addMessage('assistant', reply);
     } catch (err) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
@@ -71,28 +61,34 @@ export function ChatPanel() {
           <AgentIcon className="h-6 w-6" />
           <span className="text-sm font-medium text-[var(--text-muted)]">Agente de Salud</span>
         </div>
-        {/* Only shown when voice mode is closed - once open, VoiceChatAgent's own "Salir del modo voz" is the single way to close it. */}
-        {!isVoiceModeOpen && (
-          <button
-            type="button"
-            onClick={() => setIsVoiceModeOpen(true)}
-            className="flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-75"
-          >
-            <Mic className="h-4 w-4" />
-            Toca para hablar
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Single click: starts the voice call (see VoiceModal) and hands off from this text panel. */}
+          {!isVoiceActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setVoiceActive(true);
+                onClose?.();
+              }}
+              className="flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-75"
+            >
+              <Mic className="h-4 w-4" />
+              <span className="hidden sm:inline">Toca para hablar</span>
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar chat"
+              className="rounded-full border border-[var(--card-border)] p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-bg)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {isVoiceModeOpen ? (
-        <div className="flex flex-1 items-center justify-center bg-[var(--card-bg)] px-4 py-4">
-          <VoiceChatAgent
-            onUserTranscript={(text) => setMessages((prev) => [...prev, { id: nextId++, role: 'user', text }])}
-            onAssistantTranscript={(text) => setMessages((prev) => [...prev, { id: nextId++, role: 'assistant', text }])}
-            onClose={() => setIsVoiceModeOpen(false)}
-          />
-        </div>
-      ) : (
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.map((message) => (
           <div
@@ -112,19 +108,17 @@ export function ChatPanel() {
         ))}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="rounded-2xl rounded-tl-sm bg-[var(--card-bg)] px-4 py-2 text-sm text-[var(--text-muted)] shadow-sm">
-              Pensando…
+            <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-[var(--card-bg)] px-4 py-3 shadow-sm">
+              <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)] [animation-delay:-0.3s]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)] [animation-delay:-0.15s]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]" />
             </div>
           </div>
         )}
       </div>
-      )}
 
-      {!isVoiceModeOpen && error && (
-        <div className="px-4 pb-2 text-sm text-red-600">{error}</div>
-      )}
+      {error && <div className="px-4 pb-2 text-sm text-red-600">{error}</div>}
 
-      {!isVoiceModeOpen && (
       <form onSubmit={handleSubmit} className="border-t border-[var(--card-border)] bg-[var(--card-bg)] p-3">
         <div className="flex items-center gap-2 rounded-full border border-[var(--input-border)] px-4 py-2 focus-within:border-[var(--accent)]">
           <input
@@ -132,7 +126,7 @@ export function ChatPanel() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Escribe tu pregunta…"
-            className="flex-1 bg-transparent text-sm outline-none"
+            className="flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none"
             disabled={isLoading}
           />
           <button
@@ -144,7 +138,7 @@ export function ChatPanel() {
           </button>
         </div>
       </form>
-      )}
     </div>
   );
 }
+

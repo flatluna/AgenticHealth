@@ -586,6 +586,15 @@ function MealDetailModal({
             <NutrientRow label="Vitamina A" value={meal.vitaminAMicrograms} unit="µg" />
           </tbody>
         </table>
+
+        {meal.sourceBreakdown && (
+          <>
+            <h4 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Fuente / desglose</h4>
+            <p className="rounded-lg border border-[var(--card-border)] p-2 text-sm text-[var(--text-secondary)]">
+              {meal.sourceBreakdown}
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

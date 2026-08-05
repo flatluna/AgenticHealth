@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router';
 import { Dumbbell, Scale, Target, X, Apple, UserCircle } from 'lucide-react';
 import { AgentIcon } from './AgentIcon';
+import { useChatWidget } from '../contexts/ChatWidgetContext';
 
 interface SidebarProps {
   open: boolean;
@@ -10,7 +11,6 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { to: '/app', label: 'Agente de Salud', icon: null, end: true, chip: '' },
   { to: '/app/nutricion', label: 'Nutrición', icon: Apple, end: false, chip: 'bg-emerald-500/15 text-emerald-500' },
   { to: '/app/ejercicios', label: 'Ejercicios', icon: Dumbbell, end: false, chip: 'bg-orange-500/15 text-orange-500' },
   { to: '/app/peso', label: 'Peso', icon: Scale, end: false, chip: 'bg-sky-500/15 text-sky-500' },
@@ -19,6 +19,8 @@ const navItems = [
 ];
 
 export function Sidebar({ open, onClose, onNavigate }: SidebarProps) {
+  const { toggle: toggleChat } = useChatWidget();
+
   return (
     <>
       {open && (
@@ -59,6 +61,21 @@ export function Sidebar({ open, onClose, onNavigate }: SidebarProps) {
         </div>
 
         <nav className="flex flex-col gap-1 p-3">
+          <button
+            type="button"
+            onClick={() => {
+              toggleChat();
+              onNavigate();
+            }}
+            title="Agente de Salud"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all hover:bg-[var(--sidebar-hover-bg)] ${
+              open ? '' : 'lg:justify-center lg:px-0'
+            }`}
+            style={{ color: 'var(--sidebar-text)' }}
+          >
+            <AgentIcon className="h-8 w-8" />
+            <span className={open ? '' : 'lg:hidden'}>Agente de Salud</span>
+          </button>
           {navItems.map(({ to, label, icon: Icon, end, chip }) => (
             <NavLink
               key={to}

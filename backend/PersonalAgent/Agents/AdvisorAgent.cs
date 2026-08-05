@@ -298,9 +298,29 @@ public sealed class AdvisorAgent
 
     private static (DateTime fromUtc, DateTime toUtc) ResolveRange(string? fromDateIso, string? toDateIso, int defaultDays)
     {
-        var toUtc = DateTime.TryParse(toDateIso, out var parsedTo) ? parsedTo.ToUniversalTime() : DateTime.UtcNow;
-        var fromUtc = DateTime.TryParse(fromDateIso, out var parsedFrom) ? parsedFrom.ToUniversalTime() : toUtc.AddDays(-defaultDays);
+        var toUtc = ParseCentralOrUtcToUtc(toDateIso, DateTime.UtcNow);
+        var fromUtc = ParseCentralOrUtcToUtc(fromDateIso, toUtc.AddDays(-defaultDays));
         return (fromUtc, toUtc);
+    }
+
+    // Naive (no-offset) ISO strings from the LLM represent Central local time (matching the
+    // "[Fecha y hora actual: ...]" context it's given) - must be explicitly converted from
+    // Central, NOT passed through DateTime.ToUniversalTime(), which assumes the value is
+    // already in the SERVER's local timezone (UTC on Azure Linux, silently a no-op there).
+    private static DateTime ParseCentralOrUtcToUtc(string? iso, DateTime fallbackUtc)
+    {
+        if (string.IsNullOrWhiteSpace(iso) ||
+            !DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            return fallbackUtc;
+        }
+
+        return parsed.Kind switch
+        {
+            DateTimeKind.Utc => parsed,
+            DateTimeKind.Local => parsed.ToUniversalTime(),
+            _ => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified), CentralTimeZone),
+        };
     }
 
     private static string ToLocalIso(DateTime recordedAtUtc) =>

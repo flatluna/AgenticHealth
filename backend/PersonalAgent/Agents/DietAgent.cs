@@ -41,20 +41,58 @@ public sealed class DietAgent
           Si esa herramienta no está disponible o falla, usa "search_food" (base de datos
           Open Food Facts) como alternativa. No inventes datos si tienes una herramienta
           disponible para buscarlos.
-        - Cuando el usuario te diga que consumió/comió algo y te pida registrarlo o sumarlo
-          a su consumo (ej. "me comí una banana a las 8:30am, súmala a mi desayuno de hoy"),
-          usa la herramienta "log_meal" para guardarlo. Usa los datos nutricionales que ya
-          conoces de la conversación (por ejemplo, si ya buscaste o mencionaste las calorías
-          de ese alimento antes) en vez de volver a preguntarlos, a menos que falten datos
-          esenciales como las calorías.
+
+        - FLUJO OBLIGATORIO cuando el usuario diga que consumió/comió algo (ej. "hoy comí
+          una banana de 90 calorías", "me comí una manzana"), en DOS pasos - NUNCA llames a
+          "log_meal" en el mismo turno en que el usuario reporta la comida:
+          1) Primero, SIEMPRE usa "search_food_bing" para obtener datos nutricionales reales
+             y actualizados de ese alimento - incluso si el usuario ya te dio un número de
+             calorías. No confíes en el número que dio el usuario ni en tu propio
+             conocimiento como fuente final: la búsqueda con Bing es la fuente de verdad
+             para evitar alucinar datos. Si "search_food_bing" no está disponible o falla,
+             usa "search_food" como respaldo; si ninguna funciona, dilo explícitamente y usa
+             tu mejor estimación dejando claro que es aproximada.
+          2) Con esos datos, responde al usuario confirmando qué entendiste que comió y
+             muéstrale lo esencial (calorías, y cuando existan proteína, carbohidratos,
+             grasa y algún micronutriente relevante como potasio o sodio), y PREGÚNTALE
+             explícitamente si quiere que lo agregues a su registro de consumo (ej. "¿Quieres
+             que lo agregue a tu consumo de hoy?"). NO llames a "log_meal" todavía.
+          Solo cuando el usuario responda afirmativamente en un mensaje POSTERIOR (ej. "sí",
+          "dale", "agrégalo", "claro que sí") confirmando ESE alimento pendiente, usa la
+          herramienta "log_meal" para guardarlo, con los datos nutricionales obtenidos en el
+          paso 1 (no los que haya mencionado el usuario de memoria). Si el usuario responde
+          que no, o cambia de tema, no registres nada.
         - Al registrar o buscar un alimento, intenta obtener/estimar además de calorías,
           proteína, carbohidratos y grasa total: porción, grasa saturada, fibra, azúcares,
           sodio, calcio, hierro, magnesio, potasio y vitamina A (los nutrientes más comunes
           de una base de datos nutricional). Si la herramienta de búsqueda no los trae
-          todos, complétalos con tu conocimiento general en vez de dejarlos vacíos. No es
-          necesario preguntarle estos datos al usuario.
+          todos, complétalos con tu conocimiento general en vez de dejarlos vacíos - NUNCA
+          dejes un campo de micronutriente sin valor solo porque Bing no lo devolvió; usa tu
+          mejor estimación general para ese alimento. No es necesario preguntarle estos
+          datos al usuario.
+        - Cuando la comida tenga VARIOS componentes (ej. "pan con mantequilla", "arroz con
+          pollo y ensalada"), busca/estima cada componente por separado (llama a
+          search_food_bing una vez por cada componente si es necesario) y, al llamar a
+          "log_meal", el parámetro "sourceBreakdown" es OBLIGATORIO, nunca lo omitas ni lo
+          dejes vacío: llénalo con un desglose legible por ingrediente y su fuente, ej.
+          "Pan: 80 kcal, 3g proteína (Bing); Mantequilla: 40 kcal, 4.5g grasa (Bing)". Si es
+          un solo alimento simple, escribe igual una frase corta con su fuente (ej.
+          "Manzana mediana: 95 kcal (Bing)"). Indica siempre la fuente entre paréntesis
+          (Bing, Open Food Facts, o "estimado" si usaste tu propio conocimiento).
         - Si no tienes suficiente información del usuario (peso, objetivo, alergias, etc.)
           para dar una recomendación personalizada, pregúntala antes de asumir.
+        - Cuando el usuario se refiera a una comida pasada en vez de describirla de nuevo
+          (ej. "lo mismo que ayer", "los mismos huevos con chorizo de la semana pasada",
+          "como siempre en el desayuno"), usa la herramienta "get_recent_meals" para ver su
+          historial reciente ANTES de buscar en Bing - no le pidas que repita la
+          descripción. Busca en esa lista la comida que mejor coincida con lo que describe
+          (por fecha aproximada y texto de la descripción), reutiliza EXACTAMENTE esos
+          valores nutricionales (incluyendo el "sourceBreakdown" ya guardado, agregando algo
+          como "(igual que el <fecha>)") y confírmaselo al usuario explícitamente (ej.
+          "Encontré que ayer registraste 2 huevos con chorizo, 350 kcal - ¿registro lo mismo
+          para hoy?") antes de llamar a "log_meal" - sigue el mismo flujo de confirmación de
+          2 pasos que para una comida nueva. Si no encuentras ninguna coincidencia clara en
+          el historial, dilo y trata la comida como nueva (busca con search_food_bing).
         - No eres un médico: para condiciones médicas serias, recomienda consultar a un
           profesional de la salud.
         - Cada mensaje del usuario incluye la fecha y hora actual real entre corchetes
@@ -109,9 +147,17 @@ public sealed class DietAgent
 
         var mcpTools = await GetOrCreateMcpToolsAsync(cancellationToken);
         var logMealTool = AIFunctionFactory.Create(LogMealAsync, "log_meal",
-            "Registra una comida consumida por el usuario en su historial (base de datos), con toda la información nutricional disponible.");
+            "Registra una comida consumida por el usuario en su historial (base de datos), con toda la " +
+            "información nutricional disponible, incluyendo un desglose por ingrediente en 'sourceBreakdown' " +
+            "cuando la comida tenga varios componentes. SOLO debe llamarse después de haber mostrado los datos " +
+            "nutricionales (idealmente obtenidos con search_food_bing) y de que el usuario haya confirmado " +
+            "explícitamente que quiere agregarlo a su registro - nunca en el mismo turno en que reporta la comida.");
+        var getRecentMealsTool = AIFunctionFactory.Create(GetRecentMealsAsync, "get_recent_meals",
+            "Devuelve el historial reciente de comidas YA registradas por el usuario (fecha, descripción, " +
+            "porción y datos nutricionales completos), para cuando el usuario se refiera a una comida pasada " +
+            "en vez de describirla de nuevo (ej. 'lo mismo que ayer', 'los huevos de la semana pasada').");
 
-        IList<AITool> tools = [.. mcpTools, logMealTool];
+        IList<AITool> tools = [.. mcpTools, logMealTool, getRecentMealsTool];
         if (_bingFoodSearchProvider.IsConfigured)
         {
             var bingFoodTool = AIFunctionFactory.Create(SearchFoodBingAsync, "search_food_bing",
@@ -125,7 +171,7 @@ public sealed class DietAgent
 
         var skill = DietSkillSelector.Select(prompt);
         var skillGuidance = DietSkillLibrary.InstructionsFor(skill);
-        var nowLocal = DateTime.Now;
+        var nowLocal = TimeZoneInfo.ConvertTime(DateTime.UtcNow, MealTimeHelper.Central);
         var fullPrompt = $"[Fecha y hora actual: {nowLocal:yyyy-MM-dd HH:mm} ({nowLocal:dddd})]\n" +
             $"[Guía de skill: {skillGuidance}]\n\nPregunta del usuario: {prompt}";
 
@@ -139,6 +185,22 @@ public sealed class DietAgent
     {
         var json = await _bingFoodSearchProvider.SearchFoodNutritionJsonAsync(foodDescription, cancellationToken);
         return json ?? "No se encontraron resultados en Bing para ese alimento.";
+    }
+
+    private async Task<string> GetRecentMealsAsync(
+        [Description("Días hacia atrás a buscar en el historial, ej. 1 para 'ayer', 7 para 'la semana pasada'. Si no se especifica, usa 14.")] int? daysBack,
+        CancellationToken cancellationToken)
+    {
+        var personProvider = _serviceProvider.GetService<DefaultPersonProvider>();
+        var dbContextFactory = _serviceProvider.GetService<IDbContextFactory<PersonalAgentDbContext>>();
+
+        if (personProvider is null || dbContextFactory is null)
+        {
+            return "No se pudo consultar el historial: la base de datos no está configurada.";
+        }
+
+        var personId = await personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        return await MealHistoryHelper.GetRecentMealsSummaryAsync(dbContextFactory, personId, daysBack, cancellationToken);
     }
 
     private async Task<IList<AITool>> GetOrCreateMcpToolsAsync(CancellationToken cancellationToken)
@@ -189,6 +251,7 @@ public sealed class DietAgent
         [Description("Magnesio en miligramos.")] double? magnesiumMilligrams,
         [Description("Vitamina A en microgramos.")] double? vitaminAMicrograms,
         [Description("Hora en que se consumió, formato ISO 8601 (ej. '2026-08-03T08:30:00'). Si no se especifica, se usa la hora actual.")] string? consumedAtIso,
+        [Description("Desglose legible por ingrediente y su fuente cuando la comida tiene varios componentes, ej. 'Pan: 80 kcal (Bing); Mantequilla: 40 kcal (Bing)'. Opcional para alimentos simples.")] string? sourceBreakdown,
         CancellationToken cancellationToken)
     {
         var personProvider = _serviceProvider.GetService<DefaultPersonProvider>();
@@ -200,7 +263,7 @@ public sealed class DietAgent
         }
 
         var parsedMealType = Enum.TryParse<MealType>(mealType, ignoreCase: true, out var mt) ? mt : MealType.Snack;
-        var recordedAt = DateTime.TryParse(consumedAtIso, out var parsed) ? parsed.ToUniversalTime() : DateTime.UtcNow;
+        var recordedAt = MealTimeHelper.ParseCentralOrUtcToUtc(consumedAtIso, DateTime.UtcNow);
 
         var personId = await personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
 
@@ -225,9 +288,12 @@ public sealed class DietAgent
             MagnesiumMilligrams = magnesiumMilligrams,
             VitaminAMicrograms = vitaminAMicrograms,
             RecordedAtUtc = recordedAt,
+            SourceBreakdown = string.IsNullOrWhiteSpace(sourceBreakdown)
+                ? $"{description}: {calories?.ToString("0") ?? "?"} kcal (fuente no especificada)"
+                : sourceBreakdown,
         });
         await db.SaveChangesAsync(cancellationToken);
 
-        return $"Registrado: {description} ({parsedMealType}, {calories?.ToString("0") ?? "?"} kcal) a las {recordedAt:HH:mm}.";
+        return $"Registrado: {description} ({parsedMealType}, {calories?.ToString("0") ?? "?"} kcal) a las {TimeZoneInfo.ConvertTimeFromUtc(recordedAt, MealTimeHelper.Central):HH:mm}.";
     }
 }

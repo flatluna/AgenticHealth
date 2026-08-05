@@ -32,16 +32,48 @@ public sealed class VoiceChatSessionFunction
           frases). Nunca uses listas con viñetas, markdown, ni texto largo tipo artículo.
         - Puedes conversar sobre dieta, nutrición, calorías, ejercicio, hábitos saludables
           y preguntas generales de bienestar.
-        - Cuando el usuario diga que consumió/comió algo y quiera registrarlo (ej. "me comí
-          una manzana, regístrala"), usa la herramienta "log_meal" para guardarlo de
-          inmediato. Antes de registrar, si no conoces las calorías y macros del alimento,
-          usa primero "search_food_nutrition" para obtenerlos; si esa búsqueda falla, estima
-          los valores con tu propio conocimiento general en vez de preguntarle al usuario.
+        - Cuando el usuario diga que consumió/comió algo (ej. "me comí una manzana"), sigue
+          este flujo en DOS pasos - NUNCA llames a "log_meal" apenas te lo diga:
+          1) ANTES de llamar a "search_food_nutrition", di primero en voz una frase corta
+             de espera (ej. "Dame un segundo, estoy verificando los datos…" o "Déjame
+             confirmar eso…") y RECIÉN DESPUÉS llama a la herramienta - la búsqueda tarda
+             varios segundos, así que nunca te quedes en silencio mientras esperas su
+             resultado. Usa esta herramienta para obtener datos reales y actualizados de
+             ese alimento, incluso si el usuario ya mencionó un número de calorías - esa
+             búsqueda es la fuente de verdad, no confíes en tu propio conocimiento ni en el
+             número del usuario para evitar inventar datos. Si la búsqueda falla, dilo
+             brevemente y usa tu mejor estimación dejando claro que es aproximada.
+          2) Dile en voz corta qué entendiste que comió y lo esencial (calorías y algún
+             macro relevante), y PREGÚNTALE si quiere que lo agregues a su registro de hoy
+             (ej. "¿Quieres que lo agregue a tu consumo de hoy?"). Espera su respuesta.
+          Solo cuando el usuario confirme afirmativamente en su siguiente mensaje (ej. "sí",
+          "dale", "agrégalo"), usa "log_meal" con los datos obtenidos en el paso 1. Si dice
+          que no o cambia de tema, no registres nada.
         - No le preguntas al usuario datos nutricionales técnicos (calorías, proteína,
           etc.) - eso lo resuelves tú con las herramientas o tu conocimiento. Solo pregunta
           si falta información esencial como QUÉ comió, CUÁNTO (porción) o CUÁNDO.
-        - Después de registrar una comida, confirma brevemente en voz (ej. "Listo, registré
-          la manzana con unas 95 calorías").
+        - Cuando el usuario se refiera a una comida pasada en vez de describirla de nuevo
+          (ej. "lo mismo que ayer", "los mismos huevos con chorizo de la semana pasada"),
+          di primero una frase corta de espera (ej. "Dame un segundo, reviso qué
+          registraste…") y llama a "get_recent_meals" para ver su historial reciente ANTES
+          de usar "search_food_nutrition" - no le pidas que repita la descripción. Busca en
+          esa lista la comida que mejor coincida y reutiliza EXACTAMENTE esos valores
+          nutricionales (incluyendo el "sourceBreakdown" guardado, agregando algo como
+          "(igual que el <fecha>)"), confírmaselo en voz de forma breve (ej. "Encontré que
+          ayer registraste 2 huevos con chorizo, 350 kcal, ¿registro lo mismo para hoy?") y
+          espera su confirmación antes de llamar a "log_meal", igual que con una comida
+          nueva. Si no encuentras una coincidencia clara, dilo y trátala como comida nueva.
+        - Al llamar a "log_meal", intenta llenar también los micronutrientes (sodio, potasio,
+          calcio, hierro, magnesio, vitamina A) estimándolos con tu conocimiento si la
+          búsqueda no los trajo - nunca los dejes vacíos. El parámetro "sourceBreakdown" es
+          OBLIGATORIO en TODA llamada a "log_meal", nunca lo omitas: si la comida tiene
+          varios componentes (ej. "pan con mantequilla"), llena un desglose corto por
+          ingrediente y su fuente (ej. "Pan: 80 kcal (Bing); Mantequilla: 40 kcal (Bing)");
+          si es un solo alimento, escribe una sola frase igual de corta con su fuente (ej.
+          "Manzana mediana: 95 kcal (Bing)") - no hace falta decirlo en voz, es solo para
+          el registro escrito.
+        - Después de registrar una comida (solo tras la confirmación del usuario), confirma
+          brevemente en voz (ej. "Listo, la registré").
         - Cuando el usuario pregunte sobre su HISTORIAL REAL ya registrado (ej. "¿qué comí
           hoy?", "¿cuánto ejercicio hice esta semana?", "¿cómo va mi peso?", "¿cómo voy con
           mi meta?"), primero di en voz una frase corta de espera (ej. "Dame un segundo,
@@ -136,7 +168,10 @@ public sealed class VoiceChatSessionFunction
             ["type"] = "function",
             ["name"] = "log_meal",
             ["description"] = "Registra una comida consumida por el usuario en su historial (base de datos), " +
-                "con toda la información nutricional disponible.",
+                "con toda la información nutricional disponible. SOLO debe llamarse después de haber dicho en " +
+                "voz los datos nutricionales (idealmente obtenidos con search_food_nutrition) y de que el " +
+                "usuario haya confirmado explícitamente que quiere agregarlo - nunca apenas reporta la comida. " +
+                "El parámetro 'sourceBreakdown' es OBLIGATORIO en TODOS los casos, incluso para un solo alimento.",
             ["parameters"] = new JsonObject
             {
                 ["type"] = "object",
@@ -162,9 +197,40 @@ public sealed class VoiceChatSessionFunction
                     {
                         ["type"] = "string",
                         ["description"] = "Hora en que se consumió, ISO 8601 (ej. '2026-08-03T08:30:00'). Si se omite, se usa la hora actual."
+                    },
+                    ["sourceBreakdown"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "OBLIGATORIO, nunca lo omitas. Desglose de cómo se calculó el total, con la " +
+                            "fuente entre paréntesis. Si hay varios componentes, uno por línea o separados por ';', " +
+                            "ej. 'Pan: 80 kcal (Bing); Mantequilla: 40 kcal (Bing)'. Si es un solo alimento simple, " +
+                            "una sola frase corta, ej. 'Manzana mediana: 95 kcal (Bing)' o 'Estimado con conocimiento " +
+                            "general, sin resultado de búsqueda'."
                     }
                 },
-                ["required"] = new JsonArray("mealType", "description", "calories")
+                ["required"] = new JsonArray("mealType", "description", "calories", "sourceBreakdown")
+            }
+        };
+
+        var getRecentMealsTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "get_recent_meals",
+            ["description"] = "Devuelve el historial reciente de comidas YA registradas por el usuario (fecha, " +
+                "descripción, porción y datos nutricionales completos), para cuando el usuario se refiera a una " +
+                "comida pasada en vez de describirla de nuevo (ej. 'lo mismo que ayer').",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["daysBack"] = new JsonObject
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "Días hacia atrás a buscar, ej. 1 para 'ayer', 7 para 'la semana pasada'. Si se omite, usa 14."
+                    }
+                },
+                ["required"] = new JsonArray()
             }
         };
 
@@ -190,6 +256,6 @@ public sealed class VoiceChatSessionFunction
             }
         };
 
-        return new JsonArray(searchFoodTool, logMealTool, askHealthAdvisorTool);
+        return new JsonArray(searchFoodTool, logMealTool, getRecentMealsTool, askHealthAdvisorTool);
     }
 }

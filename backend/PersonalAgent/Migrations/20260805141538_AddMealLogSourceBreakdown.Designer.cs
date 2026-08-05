@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PersonalAgent.Data;
 
@@ -11,9 +12,11 @@ using PersonalAgent.Data;
 namespace PersonalAgent.Migrations
 {
     [DbContext(typeof(PersonalAgentDbContext))]
-    partial class PersonalAgentDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805141538_AddMealLogSourceBreakdown")]
+    partial class AddMealLogSourceBreakdown
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useMsal } from '@azure/msal-react';
 import { InteractionStatus } from '@azure/msal-browser';
 import { isMsalConfigured, loginRequest } from '../auth/msalConfig';
+import { apiBaseUrl } from '../config/api';
 
 interface AuthUser {
   id: number;
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistUser(baseUser);
 
     try {
-      const response = await fetch('/api/auth/subscribe', {
+      const response = await fetch(`${apiBaseUrl}/auth/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-msal-user': baseUser.azureObjectId },
         body: JSON.stringify({
@@ -94,14 +95,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await instance.logoutRedirect();
+    // logoutRedirect() does a full page navigation - code after it never runs, so the
+    // cached user must be cleared BEFORE calling it, otherwise the stale localStorage
+    // entry gets picked back up as a "logged in" user on return (fake/stuck session).
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
+    await instance.logoutRedirect();
   };
 
   const refreshUser = async () => {
     try {
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch(`${apiBaseUrl}/auth/me`, {
         headers: { 'x-msal-user': user?.azureObjectId ?? '' },
       });
       if (!response.ok) {
@@ -120,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const subscribe = async (payload: { azureObjectId: string; email: string; displayName: string; preferredLanguage?: string; timezone?: string }) => {
-    const response = await fetch('/api/auth/subscribe', {
+    const response = await fetch(`${apiBaseUrl}/auth/subscribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-msal-user': payload.azureObjectId },
       body: JSON.stringify(payload),

@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AppLayout } from './components/AppLayout'
-import { ChatPanel } from './components/ChatPanel'
+import { HomePage } from './pages/HomePage'
 import { LandingPage } from './pages/LandingPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { FoodPage } from './pages/FoodPage'
@@ -31,6 +31,22 @@ function LandingOrApp() {
   return isAuthenticated ? <Navigate to="/app" replace /> : <LandingPage />;
 }
 
+// Guards every /app/* route - without this, logging out (or navigating directly to an
+// /app/... URL) left protected pages fully visible with no session.
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { loading, isAuthenticated } = useAuth();
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Cargando…</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 const router = createBrowserRouter([
   {
     path: '/',
@@ -47,9 +63,13 @@ const router = createBrowserRouter([
   },
   {
     path: '/app',
-    element: <AppLayout />,
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
     children: [
-      { index: true, element: <ChatPanel /> },
+      { index: true, element: <HomePage /> },
       { path: 'nutricion', element: <FoodPage /> },
       { path: 'ejercicios', element: <ExercisesPage /> },
       { path: 'peso', element: <WeightPage /> },

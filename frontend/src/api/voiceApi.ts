@@ -53,3 +53,17 @@ export async function executeAskAdvisorTool(question: string): Promise<{ result:
   );
   return data;
 }
+
+/**
+ * Executes the "get_recent_meals" Realtime tool - returns the user's recently logged
+ * meals so the model can reuse them when the user references a past meal instead of
+ * describing it again (ej. "lo mismo que ayer").
+ */
+export async function executeGetRecentMealsTool(daysBack?: number): Promise<{ result: string }> {
+  const { data } = await apiClient.post<{ result: string }>(
+    '/voice/tools/get-recent-meals',
+    { daysBack },
+    { timeout: 20000 },
+  );
+  return data;
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, PhoneOff, Sparkles, AlertCircle } from 'lucide-react';
-import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool } from '../api/voiceApi';
+import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool, executeGetRecentMealsTool } from '../api/voiceApi';
 
 type VoiceState = 'idle' | 'connecting' | 'connected' | 'listening' | 'speaking' | 'error';
 
@@ -32,12 +32,18 @@ export function VoiceChatAgent({
   onAssistantTranscript,
   onMealLogged,
   onClose,
+  autoConnect = false,
+  compact = false,
 }: {
   onUserTranscript?: (text: string) => void;
   onAssistantTranscript?: (text: string) => void;
   /** Fired right after "log_meal" tool executes successfully, with the confirmation text. */
   onMealLogged?: (confirmation: string) => void;
   onClose?: () => void;
+  /** Starts the call immediately on mount instead of waiting for a click on the orb. */
+  autoConnect?: boolean;
+  /** Smaller orb/spacing, used inside the small left-side voice modal. */
+  compact?: boolean;
 }) {
   const [state, setState] = useState<VoiceState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -55,6 +61,9 @@ export function VoiceChatAgent({
   // Dedup guard - Azure can report the same completed function call via both
   // response.output_item.done and response.done; only ever execute a given call_id once.
   const handledToolCallIdsRef = useRef<Set<string>>(new Set());
+  // Dedup guard - Azure can also report the same assistant transcript via both
+  // response.output_audio_transcript.done and response.done; only forward it once.
+  const lastAssistantTranscriptRef = useRef<string | null>(null);
 
   const teardown = useCallback(() => {
     if (animationFrameRef.current !== null) {
@@ -122,6 +131,11 @@ export function VoiceChatAgent({
           const { result } = await executeAskAdvisorTool(question);
           return JSON.stringify({ result });
         }
+        if (toolName === 'get_recent_meals') {
+          const daysBack = typeof args.daysBack === 'number' ? args.daysBack : undefined;
+          const { result } = await executeGetRecentMealsTool(daysBack);
+          return JSON.stringify({ result });
+        }
         return JSON.stringify({ error: `Herramienta desconocida: ${toolName}` });
       } catch (err) {
         console.error(`VoiceChatAgent: tool "${toolName}" failed`, err);
@@ -183,12 +197,21 @@ export function VoiceChatAgent({
         // transcript has varied across API versions, so check every shape defensively
         // rather than relying on just one.
         if (onAssistantTranscript) {
+          const forwardTranscript = (transcript: string) => {
+            const trimmed = transcript.trim();
+            if (!trimmed || trimmed === lastAssistantTranscriptRef.current) {
+              return;
+            }
+            lastAssistantTranscriptRef.current = trimmed;
+            onAssistantTranscript(trimmed);
+          };
+
           if (
             (payload.type === 'response.output_audio_transcript.done' || payload.type === 'response.audio_transcript.done') &&
             typeof payload.transcript === 'string' &&
             payload.transcript.trim()
           ) {
-            onAssistantTranscript(payload.transcript.trim());
+            forwardTranscript(payload.transcript);
           } else if (payload.type === 'response.done') {
             const output = ((payload.response as Record<string, unknown> | undefined)?.output as
               | Record<string, unknown>[]
@@ -198,7 +221,7 @@ export function VoiceChatAgent({
               for (const part of content) {
                 const transcript = (part.transcript as string | undefined) ?? (part.text as string | undefined);
                 if (transcript && transcript.trim()) {
-                  onAssistantTranscript(transcript.trim());
+                  forwardTranscript(transcript);
                 }
               }
             }
@@ -281,6 +304,14 @@ export function VoiceChatAgent({
     setState('idle');
   }, [teardown]);
 
+  const hasAutoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (autoConnect && !hasAutoConnectedRef.current) {
+      hasAutoConnectedRef.current = true;
+      connect();
+    }
+  }, [autoConnect, connect]);
+
   const isActive = state === 'connected' || state === 'listening' || state === 'speaking';
   const isBusy = state === 'connecting';
 
@@ -295,10 +326,10 @@ export function VoiceChatAgent({
   const gradient = stateGradient[state];
 
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-purple-200 bg-purple-50/60 p-5">
+    <div className={`flex flex-col items-center rounded-2xl border border-purple-200 bg-purple-50/60 ${compact ? 'gap-2 p-3' : 'gap-3 p-5'}`}>
       <audio ref={audioElementRef} autoPlay className="hidden" />
 
-      <div className="relative flex h-28 w-28 items-center justify-center">
+      <div className={`relative flex items-center justify-center ${compact ? 'h-16 w-16' : 'h-28 w-28'}`}>
         {/* Slowly rotating gradient halo - always visible, gives the orb a "living" feel. */}
         <div
           className={`absolute inset-0 rounded-full bg-gradient-to-tr ${gradient} opacity-60 blur-md voice-orbit-ring`}
@@ -319,22 +350,22 @@ export function VoiceChatAgent({
           onClick={isActive ? disconnect : connect}
           disabled={isBusy}
           style={{ transform: `scale(${1 + audioLevel * 0.18})` }}
-          className={`relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white shadow-lg shadow-purple-500/40 transition-transform duration-100 ${
-            isBusy ? 'opacity-70' : 'hover:scale-105'
-          } ${state === 'idle' || state === 'connected' ? 'voice-breathe' : ''}`}
+          className={`relative z-10 flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white shadow-lg shadow-purple-500/40 transition-transform duration-100 ${
+            compact ? 'h-10 w-10' : 'h-16 w-16'
+          } ${isBusy ? 'opacity-70' : 'hover:scale-105'} ${state === 'idle' || state === 'connected' ? 'voice-breathe' : ''}`}
           aria-label={isActive ? 'Colgar' : 'Hablar con el asistente'}
         >
           {isBusy ? (
-            <Sparkles className="h-7 w-7 animate-spin" />
+            <Sparkles className={compact ? 'h-4 w-4 animate-spin' : 'h-7 w-7 animate-spin'} />
           ) : isActive ? (
-            <PhoneOff className="h-7 w-7" />
+            <PhoneOff className={compact ? 'h-4 w-4' : 'h-7 w-7'} />
           ) : (
-            <Mic className="h-7 w-7" />
+            <Mic className={compact ? 'h-4 w-4' : 'h-7 w-7'} />
           )}
         </button>
       </div>
 
-      <p className="text-sm font-medium text-purple-800">{STATE_LABEL[state]}</p>
+      <p className={compact ? 'text-xs font-medium text-purple-800' : 'text-sm font-medium text-purple-800'}>{STATE_LABEL[state]}</p>
 
       {errorMessage && (
         <div className="flex items-center gap-1.5 text-xs text-red-600">
@@ -350,9 +381,9 @@ export function VoiceChatAgent({
             teardown();
             onClose();
           }}
-          className="text-xs font-medium text-slate-500 hover:text-slate-700"
+          className={compact ? 'text-[11px] font-medium text-slate-500 hover:text-slate-700' : 'text-xs font-medium text-slate-500 hover:text-slate-700'}
         >
-          Salir del modo voz
+          {compact ? 'Colgar' : 'Salir del modo voz'}
         </button>
       )}
     </div>

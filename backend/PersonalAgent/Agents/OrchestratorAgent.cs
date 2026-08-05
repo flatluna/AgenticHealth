@@ -32,8 +32,22 @@ public sealed class OrchestratorAgent
           comí hoy?", "¿cuánto ejercicio hice esta semana?", "¿cómo va mi peso?", "¿cómo voy
           con mi meta?"), llama a la herramienta "ask_advisor_agent" en vez de las de dieta/
           ejercicio - esas dan consejo general, esta reporta datos reales guardados.
+        - EXCEPCIÓN importante: si el usuario quiere REGISTRAR/AGREGAR una comida de HOY
+          refiriéndose a una comida pasada en vez de describirla de nuevo (ej. "hoy quiero
+          lo mismo que ayer", "agrégame los mismos huevos con chorizo de la semana pasada"),
+          NO uses "ask_advisor_agent" - llama a "ask_diet_agent", que sí puede consultar el
+          historial reciente Y registrar la comida nueva. Usa "ask_advisor_agent" solo para
+          preguntas de solo lectura, no cuando la intención es registrar algo nuevo.
         - En cualquier otro caso (preguntas personales generales), llama a la herramienta
           "ask_personal_agent".
+        - IMPORTANTE - continuidad de conversación: si el mensaje del usuario es una
+          respuesta corta de confirmación o seguimiento (ej. "sí", "no", "dale", "claro",
+          "agrégalo", "confirmo", "cámbialo", o cualquier respuesta breve sin tema explícito)
+          que continúa un intercambio anterior en ESTA MISMA conversación, NO decidas el
+          tema desde cero: enruta a la MISMA herramienta que usaste en tu turno anterior
+          (revisa el historial de esta conversación), para que el especialista correcto
+          (el que tiene el contexto pendiente, ej. una comida esperando confirmación) reciba
+          el mensaje. Solo cambia de herramienta si el usuario claramente cambia de tema.
         - Llama exactamente UNA herramienta por petición del usuario.
         - La herramienta te devuelve el texto de respuesta del especialista. Responde al
           usuario con ESE MISMO texto tal cual, como un mensaje de chat normal en texto

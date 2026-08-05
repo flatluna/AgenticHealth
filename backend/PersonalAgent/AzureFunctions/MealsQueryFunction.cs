@@ -46,6 +46,7 @@ public sealed class MealsQueryFunction
         double? IronMilligrams,
         double? MagnesiumMilligrams,
         double? VitaminAMicrograms,
+        string? SourceBreakdown,
         DateTime RecordedAtUtc);
 
     public sealed record NutritionTotals(
@@ -126,6 +127,7 @@ public sealed class MealsQueryFunction
                     m.IronMilligrams,
                     m.MagnesiumMilligrams,
                     m.VitaminAMicrograms,
+                    m.SourceBreakdown,
                     DateTime.SpecifyKind(m.RecordedAtUtc, DateTimeKind.Utc)))
                 .ToList();
 

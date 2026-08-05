@@ -53,5 +53,12 @@ public sealed class MealLog
 
     public double? VitaminAMicrograms { get; set; }
 
+    /// <summary>
+    /// Desglose legible de cómo se obtuvo el cálculo cuando la comida tiene varios
+    /// componentes (ej. "Pan: 80 kcal, 3g proteína (Bing); Mantequilla: 40 kcal, 4.5g grasa
+    /// (Bing)"), para que el usuario pueda ver de dónde salen los números totales.
+    /// </summary>
+    public string? SourceBreakdown { get; set; }
+
     public DateTime RecordedAtUtc { get; set; } = DateTime.UtcNow;
 }
