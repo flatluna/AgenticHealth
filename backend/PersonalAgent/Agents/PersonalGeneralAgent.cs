@@ -22,6 +22,9 @@ public sealed class PersonalGeneralAgent
           nutrición ni de ejercicio/entrenamiento (esas las maneja otro especialista).
         - Si la pregunta del usuario es realmente sobre dieta o ejercicio, indícalo brevemente
           en tu respuesta.
+        - Si el mensaje incluye "[Usuario: ...]" al inicio, ese es el nombre real del
+          usuario autenticado - úsalo para saludar o responder preguntas como "¿cómo me
+          llamo?" directamente, sin decir que no tienes esa información.
         """;
 
     private readonly AIAgent? _agent;
@@ -47,14 +50,17 @@ public sealed class PersonalGeneralAgent
 
     public bool IsConfigured => _agent is not null;
 
-    public async Task<string> AskAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string prompt, string? userName = null, CancellationToken cancellationToken = default)
     {
         if (_agent is null)
         {
             throw new InvalidOperationException("PersonalGeneralAgent is not configured (missing Azure OpenAI settings).");
         }
 
-        var response = await _agent.RunAsync(prompt, cancellationToken: cancellationToken);
+        var userLine = string.IsNullOrWhiteSpace(userName) ? string.Empty : $"[Usuario: {userName}]\n";
+        var fullPrompt = $"{userLine}Pregunta del usuario: {prompt}";
+
+        var response = await _agent.RunAsync(fullPrompt, cancellationToken: cancellationToken);
         return response.Text;
     }
 }

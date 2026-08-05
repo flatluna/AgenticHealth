@@ -49,7 +49,7 @@ public sealed class ExerciseAgent
 
     public bool IsConfigured => _agent is not null;
 
-    public async Task<string> AskAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string prompt, string? userName = null, CancellationToken cancellationToken = default)
     {
         if (_agent is null)
         {
@@ -58,7 +58,8 @@ public sealed class ExerciseAgent
 
         var skill = ExerciseSkillSelector.Select(prompt);
         var skillGuidance = ExerciseSkillLibrary.InstructionsFor(skill);
-        var fullPrompt = $"[Guía de skill: {skillGuidance}]\n\nPregunta del usuario: {prompt}";
+        var userLine = string.IsNullOrWhiteSpace(userName) ? string.Empty : $"[Usuario: {userName}]\n";
+        var fullPrompt = $"{userLine}[Guía de skill: {skillGuidance}]\n\nPregunta del usuario: {prompt}";
 
         var response = await _agent.RunAsync(fullPrompt, cancellationToken: cancellationToken);
         return response.Text;

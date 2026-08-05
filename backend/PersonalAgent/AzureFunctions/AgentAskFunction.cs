@@ -17,7 +17,7 @@ public sealed class AgentAskFunction
         _logger = logger;
     }
 
-    public sealed record AskRequest(string Message, string? SessionId);
+    public sealed record AskRequest(string Message, string? SessionId, string? UserName);
 
     public sealed record AskResponse(string Reply, string SessionId);
 
@@ -58,7 +58,7 @@ public sealed class AgentAskFunction
 
         try
         {
-            var reply = await _orchestrator.AskAsync(body.Message, sessionId, cancellationToken);
+            var reply = await _orchestrator.AskAsync(body.Message, sessionId, body.UserName, cancellationToken);
             return await FunctionResponseFactory.SuccessResponseAsync(request, new AskResponse(reply, sessionId));
         }
         catch (Exception ex)

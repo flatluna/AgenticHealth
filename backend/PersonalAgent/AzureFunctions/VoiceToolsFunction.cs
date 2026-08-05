@@ -244,7 +244,7 @@ public sealed class VoiceToolsFunction
 
         try
         {
-            var answer = await _advisorAgent.AskAsync(body.Question, cancellationToken);
+            var answer = await _advisorAgent.AskAsync(body.Question, cancellationToken: cancellationToken);
             return await FunctionResponseFactory.SuccessResponseAsync(request, new { result = answer });
         }
         catch (Exception ex)

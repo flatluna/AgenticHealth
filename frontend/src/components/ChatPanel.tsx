@@ -3,6 +3,7 @@ import { Mic, X } from 'lucide-react';
 import { askAgent } from '../api/agentApi';
 import { AgentIcon } from './AgentIcon';
 import { useChatWidget } from '../contexts/ChatWidgetContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const SESSION_STORAGE_KEY = 'personal-agent-session-id';
 
@@ -13,6 +14,7 @@ interface ChatPanelProps {
 
 export function ChatPanel({ onClose }: ChatPanelProps = {}) {
   const { messages, addMessage, isVoiceActive, setVoiceActive } = useChatWidget();
+  const { user } = useAuth();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function ChatPanel({ onClose }: ChatPanelProps = {}) {
     setError(null);
 
     try {
-      const { reply, sessionId: newSessionId } = await askAgent(trimmed, sessionId);
+      const { reply, sessionId: newSessionId } = await askAgent(trimmed, sessionId, user?.displayName);
       setSessionId(newSessionId);
       sessionStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
       addMessage('assistant', reply);

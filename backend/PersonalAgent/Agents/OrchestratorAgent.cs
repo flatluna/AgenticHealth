@@ -30,8 +30,10 @@ public sealed class OrchestratorAgent
           llama a la herramienta "ask_exercise_agent".
         - Si la pregunta trata sobre el HISTORIAL REAL ya registrado del usuario (ej. "¿qué
           comí hoy?", "¿cuánto ejercicio hice esta semana?", "¿cómo va mi peso?", "¿cómo voy
-          con mi meta?"), llama a la herramienta "ask_advisor_agent" en vez de las de dieta/
-          ejercicio - esas dan consejo general, esta reporta datos reales guardados.
+          con mi meta?", "¿cuál es mi estatura/nivel de actividad guardado?"), llama a la
+          herramienta "ask_advisor_agent" en vez de las de dieta/ejercicio - esas dan
+          consejo general, esta reporta datos reales guardados (incluye el perfil: nombre,
+          estatura, peso actual, nivel de actividad).
         - EXCEPCIÓN importante: si el usuario quiere REGISTRAR/AGREGAR una comida de HOY
           refiriéndose a una comida pasada en vez de describirla de nuevo (ej. "hoy quiero
           lo mismo que ayer", "agrégame los mismos huevos con chorizo de la semana pasada"),
@@ -94,7 +96,7 @@ public sealed class OrchestratorAgent
 
     public bool IsConfigured => _chatClient is not null;
 
-    public async Task<string> AskAsync(string prompt, string sessionId, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string prompt, string sessionId, string? userName = null, CancellationToken cancellationToken = default)
     {
         if (_chatClient is null)
         {
@@ -105,27 +107,27 @@ public sealed class OrchestratorAgent
         [
             AIFunctionFactory.Create(
                 ([Description("La pregunta original del usuario sobre dieta, nutrición o calorías.")] string userMessage) =>
-                    _dietAgent.AskAsync(userMessage, sessionId, cancellationToken),
+                    _dietAgent.AskAsync(userMessage, sessionId, userName, cancellationToken),
                 "ask_diet_agent",
                 "Reenvía la pregunta al especialista en dieta, nutrición y conteo de calorías."),
 
             AIFunctionFactory.Create(
                 ([Description("La pregunta original del usuario sobre ejercicio o entrenamiento.")] string userMessage) =>
-                    _exerciseAgent.AskAsync(userMessage),
+                    _exerciseAgent.AskAsync(userMessage, userName, cancellationToken),
                 "ask_exercise_agent",
                 "Reenvía la pregunta al especialista en ejercicio y entrenamiento."),
 
             AIFunctionFactory.Create(
                 ([Description("La pregunta original del usuario, de tipo personal/general.")] string userMessage) =>
-                    _personalGeneralAgent.AskAsync(userMessage),
+                    _personalGeneralAgent.AskAsync(userMessage, userName, cancellationToken),
                 "ask_personal_agent",
                 "Reenvía la pregunta al asistente personal general (catch-all)."),
 
             AIFunctionFactory.Create(
-                ([Description("La pregunta original del usuario sobre su historial real: comidas, ejercicio, peso o metas ya registradas.")] string userMessage) =>
-                    _advisorAgent.AskAsync(userMessage, cancellationToken),
+                ([Description("La pregunta original del usuario sobre su historial real: comidas, ejercicio, peso, metas o perfil ya registrados.")] string userMessage) =>
+                    _advisorAgent.AskAsync(userMessage, userName, cancellationToken),
                 "ask_advisor_agent",
-                "Reenvía la pregunta al asesor que consulta el historial REAL guardado del usuario (comidas, ejercicio, peso, metas)."),
+                "Reenvía la pregunta al asesor que consulta el historial REAL guardado del usuario (comidas, ejercicio, peso, metas, perfil)."),
         ];
 
         var agent = _chatClient.AsIChatClient().AsAIAgent(instructions: Instructions, name: "OrchestratorAgent", tools: tools);

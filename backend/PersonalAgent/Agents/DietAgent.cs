@@ -138,7 +138,7 @@ public sealed class DietAgent
 
     public bool IsConfigured => _chatClient is not null;
 
-    public async Task<string> AskAsync(string prompt, string sessionId, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string prompt, string sessionId, string? userName = null, CancellationToken cancellationToken = default)
     {
         if (_chatClient is null)
         {
@@ -172,7 +172,8 @@ public sealed class DietAgent
         var skill = DietSkillSelector.Select(prompt);
         var skillGuidance = DietSkillLibrary.InstructionsFor(skill);
         var nowLocal = TimeZoneInfo.ConvertTime(DateTime.UtcNow, MealTimeHelper.Central);
-        var fullPrompt = $"[Fecha y hora actual: {nowLocal:yyyy-MM-dd HH:mm} ({nowLocal:dddd})]\n" +
+        var userLine = string.IsNullOrWhiteSpace(userName) ? string.Empty : $"[Usuario: {userName}]\n";
+        var fullPrompt = $"{userLine}[Fecha y hora actual: {nowLocal:yyyy-MM-dd HH:mm} ({nowLocal:dddd})]\n" +
             $"[Guía de skill: {skillGuidance}]\n\nPregunta del usuario: {prompt}";
 
         var response = await agent.RunAsync(fullPrompt, session, cancellationToken: cancellationToken);

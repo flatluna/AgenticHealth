@@ -36,9 +36,14 @@ public sealed class AdvisorAgent
           de fecha cuando el usuario diga "hoy", "ayer", "esta semana", "este mes", "el mes
           pasado", etc., y pásalos como fechas ISO 8601 (ej. "2026-08-04T00:00:00") a las
           herramientas.
-        - SIEMPRE llama a "get_meal_history", "get_exercise_history", "get_weight_history"
-          y/o "get_goals_summary" para obtener datos reales ANTES de responder. Nunca
-          inventes lo que el usuario comió, hizo de ejercicio, pesó o se propuso como meta.
+        - SIEMPRE llama a "get_meal_history", "get_exercise_history", "get_weight_history",
+          "get_goals_summary" y/o "get_profile_summary" para obtener datos reales ANTES de
+          responder. Nunca inventes lo que el usuario comió, hizo de ejercicio, pesó o se
+          propuso como meta.
+        - Si preguntan por su nombre, estatura o nivel de actividad guardado, usa
+          "get_profile_summary". Si el mensaje incluye "[Usuario: ...]" al inicio, ese es
+          el nombre real del usuario - úsalo para responder preguntas como "¿cómo me llamo?"
+          sin necesidad de llamar a ninguna herramienta para eso.
         - Llama SOLO a la(s) herramienta(s) estrictamente necesaria(s) para responder la
           pregunta concreta - no llames a las cuatro "por si acaso". Ej: si preguntan solo
           por comida, llama únicamente a "get_meal_history"; si preguntan solo por su meta
@@ -94,7 +99,7 @@ public sealed class AdvisorAgent
 
     public bool IsConfigured => _chatClient is not null;
 
-    public async Task<string> AskAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string prompt, string? userName = null, CancellationToken cancellationToken = default)
     {
         if (_chatClient is null)
         {
@@ -111,15 +116,36 @@ public sealed class AdvisorAgent
                 "Devuelve el historial de peso del usuario en un rango de fechas (JSON)."),
             AIFunctionFactory.Create(GetGoalsSummaryAsync, "get_goals_summary",
                 "Devuelve las metas activas del usuario y su último plan de objetivos generado (peso objetivo, calorías diarias, etc.) en JSON."),
+            AIFunctionFactory.Create(GetProfileSummaryAsync, "get_profile_summary",
+                "Devuelve datos guardados del perfil del usuario (estatura y nivel de actividad) en JSON."),
         ];
 
         var agent = _chatClient.AsIChatClient().AsAIAgent(instructions: Instructions, name: "AdvisorAgent", tools: tools);
 
         var nowLocal = TimeZoneInfo.ConvertTime(DateTime.UtcNow, CentralTimeZone);
-        var fullPrompt = $"[Fecha y hora actual: {nowLocal:yyyy-MM-dd HH:mm} ({nowLocal:dddd})]\n\nPregunta del usuario: {prompt}";
+        var userLine = string.IsNullOrWhiteSpace(userName) ? string.Empty : $"[Usuario: {userName}]\n";
+        var fullPrompt = $"{userLine}[Fecha y hora actual: {nowLocal:yyyy-MM-dd HH:mm} ({nowLocal:dddd})]\n\nPregunta del usuario: {prompt}";
 
         var response = await agent.RunAsync(fullPrompt, cancellationToken: cancellationToken);
         return response.Text;
+    }
+
+    private async Task<string> GetProfileSummaryAsync(CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null || _personProvider is null)
+        {
+            return "La base de datos no está configurada.";
+        }
+
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var person = await db.People
+            .Where(p => p.Id == personId)
+            .Select(p => new { p.HeightCm, p.CurrentWeightKg, p.ActivityLevel })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return JsonSerializer.Serialize(person, JsonOptions);
     }
 
     private async Task<string> GetMealHistoryAsync(

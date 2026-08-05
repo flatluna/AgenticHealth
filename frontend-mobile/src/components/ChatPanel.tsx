@@ -9,7 +9,7 @@ const SESSION_STORAGE_KEY = 'personal-agent-mobile-session-id';
 
 export function ChatPanel() {
   const { messages, addMessage, isVoiceActive, setVoiceActive } = useChatWidget();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export function ChatPanel() {
     setError(null);
 
     try {
-      const { reply, sessionId: newSessionId } = await askAgent(trimmed, sessionId);
+      const { reply, sessionId: newSessionId } = await askAgent(trimmed, sessionId, user?.displayName);
       setSessionId(newSessionId);
       sessionStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
       addMessage('assistant', reply);
