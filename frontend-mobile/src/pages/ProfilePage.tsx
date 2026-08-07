@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiBaseUrl } from '../config/api';
 import { COUNTRIES } from '../data/countries';
+import { VersionInfo } from '../components/VersionInfo';
 
 export function ProfilePage() {
   const { user } = useAuth();
@@ -112,6 +113,10 @@ export function ProfilePage() {
           Guardar perfil
         </button>
         {message && <p className="mt-3 text-sm text-[var(--text-muted)]">{message}</p>}
+      </div>
+
+      <div className="mt-8 flex justify-center pb-8">
+        <VersionInfo />
       </div>
     </div>
   );

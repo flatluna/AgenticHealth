@@ -2,9 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+// Inject build date at compile time
+const getBuildDate = () => new Date().toISOString();
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __BUILD_DATE__: JSON.stringify(getBuildDate()),
+  },
   server: {
     port: 5176,
     strictPort: true,

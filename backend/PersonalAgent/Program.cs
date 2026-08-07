@@ -78,11 +78,22 @@ try
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.Database.MigrateAsync();
+        Console.WriteLine("Database migrations applied successfully.");
+    }
+    else
+    {
+        Console.WriteLine("WARNING: IDbContextFactory<PersonalAgentDbContext> not found in service provider");
     }
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"Database initialization skipped: {ex.Message}");
+    Console.WriteLine($"ERROR: Database initialization failed: {ex.GetType().Name}");
+    Console.WriteLine($"Message: {ex.Message}");
+    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+    if (ex.InnerException is not null)
+    {
+        Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+    }
 }
 
 host.Run();

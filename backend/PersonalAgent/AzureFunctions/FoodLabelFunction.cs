@@ -216,8 +216,21 @@ public sealed class FoodLabelFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "FoodLabelSave failed");
-            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo guardar el alimento.", HttpStatusCode.InternalServerError);
+            var message = ex.Message;
+            var innerMessage = ex.InnerException?.Message ?? string.Empty;
+            var stackTrace = ex.StackTrace ?? string.Empty;
+            
+            _logger.LogError(ex, "FoodLabelSave failed: {message}. Inner: {innerMessage}", message, innerMessage);
+            
+            // Return more specific error messages based on exception type
+            var errorMsg = ex switch
+            {
+                DbUpdateException => $"Error en la base de datos: {message}. Intenta de nuevo.",
+                InvalidOperationException => $"Operación inválida: {message}",
+                _ => "No se pudo guardar el alimento. Intenta de nuevo."
+            };
+            
+            return await FunctionResponseFactory.ErrorResponseAsync(request, errorMsg, HttpStatusCode.InternalServerError);
         }
     }
 }
