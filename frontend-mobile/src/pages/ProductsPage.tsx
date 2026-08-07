@@ -396,37 +396,37 @@ function LogPersonalFoodSheet({ item, onClose, onLogged }: { item: PersonalFoodI
 
 function PersonalFoodRow({ item, onView, onAdd }: { item: PersonalFoodItem; onView: (p: PersonalFoodItem) => void; onAdd: (p: PersonalFoodItem) => void }) {
   return (
-    <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-text)]">
-          <BookMarked className="h-4 w-4" />
+    <div className="flex w-full items-center justify-between gap-2 sm:gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 sm:p-3">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <span className="flex h-8 sm:h-9 w-8 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-text)]">
+          <BookMarked className="h-3.5 sm:h-4 w-3.5 sm:w-4" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[var(--text-primary)]">{item.name}</p>
-          <p className="truncate text-xs text-[var(--text-muted)]">
+          <p className="truncate text-xs sm:text-sm font-medium text-[var(--text-primary)]">{item.name}</p>
+          <p className="truncate text-[10px] sm:text-xs text-[var(--text-muted)]">
             {item.calories != null ? `${Math.round(item.calories)} kcal` : 'Sin calorías'}
             {item.servingSize ? ` · ${item.servingSize}` : ''}
             {item.timesLogged > 0 ? ` · ${item.timesLogged}x` : ''}
           </p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
         <button
           type="button"
           onClick={() => onView(item)}
           aria-label="Ver detalle"
-          className="flex items-center gap-0.5 sm:gap-1 rounded-lg border border-[var(--card-border)] px-1.5 sm:px-2.5 py-1.5 text-[10px] sm:text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] whitespace-nowrap"
+          className="flex items-center gap-0.5 sm:gap-1 rounded-lg border border-[var(--card-border)] px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] whitespace-nowrap"
         >
-          <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+          <Eye className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
           <span className="hidden sm:inline">Ver</span>
         </button>
         <button
           type="button"
           onClick={() => onAdd(item)}
           aria-label="Adicionar a nutrición"
-          className="flex items-center gap-0.5 sm:gap-1 rounded-lg bg-[var(--accent)] px-1.5 sm:px-2.5 py-1.5 text-[10px] sm:text-xs font-semibold text-white whitespace-nowrap"
+          className="flex items-center gap-0.5 sm:gap-1 rounded-lg bg-[var(--accent)] px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs font-semibold text-white whitespace-nowrap"
         >
-          <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+          <Plus className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
           <span className="hidden sm:inline">Adicionar</span>
         </button>
       </div>
@@ -444,14 +444,14 @@ function ProductRow({
   onAdd: (p: FoodItem) => void;
 }) {
   return (
-    <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-text)]">
-          <Package className="h-4 w-4" />
+    <div className="flex w-full items-center justify-between gap-2 sm:gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 sm:p-3">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <span className="flex h-8 sm:h-9 w-8 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-text)]">
+          <Package className="h-3.5 sm:h-4 w-3.5 sm:w-4" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[var(--text-primary)]">{product.name}</p>
-          <p className="truncate text-xs text-[var(--text-muted)]">
+          <p className="truncate text-xs sm:text-sm font-medium text-[var(--text-primary)]">{product.name}</p>
+          <p className="truncate text-[10px] sm:text-xs text-[var(--text-muted)]">
             {product.brand ? `${product.brand} · ` : ''}
             {product.calories != null ? `${Math.round(product.calories)} kcal` : 'Sin calorías'}
             {product.servingSize ? ` · ${product.servingSize}` : ''}
@@ -459,23 +459,23 @@ function ProductRow({
           </p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
         <button
           type="button"
           onClick={() => onView(product)}
           aria-label="Ver producto"
-          className="flex items-center gap-0.5 sm:gap-1 rounded-lg border border-[var(--card-border)] px-1.5 sm:px-2.5 py-1.5 text-[10px] sm:text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] whitespace-nowrap"
+          className="flex items-center gap-0.5 sm:gap-1 rounded-lg border border-[var(--card-border)] px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] whitespace-nowrap"
         >
-          <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+          <Eye className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
           <span className="hidden sm:inline">Ver</span>
         </button>
         <button
           type="button"
           onClick={() => onAdd(product)}
           aria-label="Adicionar a nutrición"
-          className="flex items-center gap-0.5 sm:gap-1 rounded-lg bg-[var(--accent)] px-1.5 sm:px-2.5 py-1.5 text-[10px] sm:text-xs font-semibold text-white whitespace-nowrap"
+          className="flex items-center gap-0.5 sm:gap-1 rounded-lg bg-[var(--accent)] px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs font-semibold text-white whitespace-nowrap"
         >
-          <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+          <Plus className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
           <span className="hidden sm:inline">Adicionar</span>
         </button>
       </div>

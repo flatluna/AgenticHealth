@@ -3,6 +3,7 @@ import { LogOut, UserCircle, Palette, Check } from 'lucide-react';
 import { NavLink } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
+import { VersionInfo } from './VersionInfo';
 
 const THEME_OPTIONS: { value: Theme; label: string; swatch: string }[] = [
   { value: 'light', label: 'Claro', swatch: 'bg-gradient-to-br from-slate-100 to-white' },
@@ -22,7 +23,11 @@ export function AppHeader() {
   return (
     <header className="flex items-center justify-between gap-1 sm:gap-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 sm:px-4 py-2">
       <span className="text-xs sm:text-sm font-bold tracking-tight text-[var(--accent-text)] shrink-0">Engrams</span>
-      <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-end">
+      <div className="flex-1" />
+      <div className="hidden sm:block text-right text-[10px] text-[var(--text-muted)]">
+        <VersionInfo />
+      </div>
+      <div className="flex items-center gap-1 sm:gap-2 justify-end">
         <div className="relative hidden sm:block">
           <button
             type="button"
