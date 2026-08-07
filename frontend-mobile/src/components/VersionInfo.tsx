@@ -1,5 +1,3 @@
-import { Package } from 'lucide-react';
-
 /**
  * Displays the build date/version so users can verify they have the latest version.
  * Build date is injected at compile time by vite.config.ts
@@ -23,8 +21,7 @@ export function VersionInfo() {
   };
 
   return (
-    <div className="flex items-center justify-center gap-2 rounded-lg bg-[var(--card-bg)] px-2 py-1 text-xs">
-      <Package className="h-3 w-3 text-[var(--text-muted)]" />
+    <div className="flex items-center gap-1.5 whitespace-nowrap">
       <span className="text-[var(--text-muted)]">v{version}</span>
       <span className="text-[var(--text-muted)]">•</span>
       <span className="text-[var(--text-muted)]">{formatDate(buildDate)}</span>
