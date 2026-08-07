@@ -24,7 +24,7 @@ export function AppHeader() {
     <header className="flex items-center justify-between gap-1 sm:gap-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 sm:px-4 py-2">
       <span className="text-xs sm:text-sm font-bold tracking-tight text-[var(--accent-text)] shrink-0">Engrams</span>
       <div className="flex-1" />
-      <div className="hidden sm:block text-right text-[10px] text-[var(--text-muted)]">
+      <div className="text-[10px] sm:text-xs text-[var(--text-muted)]">
         <VersionInfo />
       </div>
       <div className="flex items-center gap-1 sm:gap-2 justify-end">
