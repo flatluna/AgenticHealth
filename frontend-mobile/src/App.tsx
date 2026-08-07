@@ -6,6 +6,7 @@ import { VoiceModal } from './components/VoiceModal'
 import { BottomNav } from './components/BottomNav'
 import { SideNav } from './components/SideNav'
 import { AppHeader } from './components/AppHeader'
+import { VersionInfo } from './components/VersionInfo'
 import { NutritionPage } from './pages/NutritionPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ExercisePage } from './pages/ExercisePage'
@@ -39,6 +40,9 @@ function LoginScreen() {
       >
         Iniciar sesión
       </button>
+      <div className="absolute bottom-4 right-4 text-white/60">
+        <VersionInfo />
+      </div>
     </div>
   );
 }
