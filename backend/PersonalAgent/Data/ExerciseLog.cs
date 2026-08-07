@@ -15,5 +15,10 @@ public sealed class ExerciseLog
 
     public double? CaloriesBurned { get; set; }
 
+    /// <summary>Links this entry to the person's own reusable catalog item (Data/PersonalExercise.cs), if it was logged from there instead of the preset dropdown.</summary>
+    public int? PersonalExerciseId { get; set; }
+
+    public PersonalExercise? PersonalExercise { get; set; }
+
     public DateTime RecordedAtUtc { get; set; } = DateTime.UtcNow;
 }

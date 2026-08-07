@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, PhoneOff, Sparkles, AlertCircle } from 'lucide-react';
-import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeAskAdvisorTool, executeGetRecentMealsTool, executeLogExerciseTool, executeDeleteMealTool } from '../api/voiceApi';
+import { requestVoiceChatSession, executeLogMealTool, executeSearchFoodTool, executeSearchFoodCatalogTool, executeAskAdvisorTool, executeGetRecentMealsTool, executeLogExerciseTool, executeDeleteMealTool, executeSearchPersonalCatalogTool, executeLogPersonalCatalogItemTool, executeSaveToPersonalCatalogTool } from '../api/voiceApi';
 
 type VoiceState = 'idle' | 'connecting' | 'connected' | 'listening' | 'speaking' | 'error';
 
@@ -131,9 +131,28 @@ export function VoiceChatAgent({
           return JSON.stringify({ confirmation });
         }
         if (toolName === 'search_food_nutrition') {
-          const foodDescription = (args.foodDescription as string) ?? '';
-          const { result } = await executeSearchFoodTool(foodDescription);
+          const foodDescriptions = (args.foodDescriptions as string[]) ?? [];
+          const { result } = await executeSearchFoodTool(foodDescriptions);
           return JSON.stringify({ result });
+        }
+        if (toolName === 'search_personal_catalog') {
+          const foodDescription = (args.foodDescription as string) ?? '';
+          const { result } = await executeSearchPersonalCatalogTool(foodDescription);
+          return JSON.stringify({ result });
+        }
+        if (toolName === 'search_food_catalog') {
+          const foodDescription = (args.foodDescription as string) ?? '';
+          const { result } = await executeSearchFoodCatalogTool(foodDescription);
+          return JSON.stringify({ result });
+        }
+        if (toolName === 'log_personal_catalog_item') {
+          const { confirmation } = await executeLogPersonalCatalogItemTool(args);
+          onMealLogged?.(confirmation);
+          return JSON.stringify({ confirmation });
+        }
+        if (toolName === 'save_to_personal_catalog') {
+          const { confirmation } = await executeSaveToPersonalCatalogTool(args);
+          return JSON.stringify({ confirmation });
         }
         if (toolName === 'ask_health_advisor') {
           const question = (args.question as string) ?? '';

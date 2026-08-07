@@ -31,9 +31,11 @@ public sealed class RealtimeVoiceSessionService
     public RealtimeVoiceSessionService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
     {
         _httpClient = httpClientFactory.CreateClient(nameof(RealtimeVoiceSessionService));
-        _endpoint = configuration["AzureOpenAIEndpoint"];
+        // Realtime model may live on its own Cognitive Services resource (separate quota/region)
+        // - fall back to the main chat endpoint/key when no dedicated one is configured.
+        _endpoint = AppConfiguration.GetSetting(configuration, "AzureOpenAIRealtimeEndpoint", "AzureOpenAIEndpoint");
         _deploymentName = configuration["AzureOpenAIRealtimeDeploymentName"];
-        _apiKey = configuration["AzureOpenAIApiKey"];
+        _apiKey = AppConfiguration.GetSetting(configuration, "AzureOpenAIRealtimeApiKey", "AzureOpenAIApiKey");
         _voice = configuration["AzureOpenAIRealtimeVoice"] is { Length: > 0 } configuredVoice
             ? configuredVoice
             : "marin";
@@ -106,7 +108,10 @@ public sealed class RealtimeVoiceSessionService
                         ["type"] = "server_vad",
                         ["threshold"] = 0.85,
                         ["prefix_padding_ms"] = 300,
-                        ["silence_duration_ms"] = 700,
+                        // 900ms (was 700ms) gives a bit more room for a natural mid-sentence
+                        // pause (ej. "espagueti blanco... más dos huevos") before treating it
+                        // as a finished turn - avoids the model acting on a partial food list.
+                        ["silence_duration_ms"] = 900,
                         ["create_response"] = true,
                         ["interrupt_response"] = true
                     },

@@ -1,8 +1,17 @@
-import { createBrowserRouter, Navigate } from 'react-router'
+import { createBrowserRouter, Navigate, Outlet } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AgentIcon } from './components/AgentIcon'
 import { ChatPanel } from './components/ChatPanel'
 import { VoiceModal } from './components/VoiceModal'
+import { BottomNav } from './components/BottomNav'
+import { SideNav } from './components/SideNav'
+import { AppHeader } from './components/AppHeader'
+import { NutritionPage } from './pages/NutritionPage'
+import { ProductsPage } from './pages/ProductsPage'
+import { ExercisePage } from './pages/ExercisePage'
+import { WeightPage } from './pages/WeightPage'
+import { GoalsPage } from './pages/GoalsPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { useAuth } from './contexts/AuthContext'
 
 function LoadingScreen() {
@@ -36,7 +45,7 @@ function LoginScreen() {
 
 function ChatScreen() {
   return (
-    <div className="relative h-dvh w-full">
+    <div className="relative h-full w-full">
       <ChatPanel />
       <VoiceModal />
     </div>
@@ -53,20 +62,44 @@ function LoginRedirectPage() {
   return <Navigate to={isAuthenticated ? '/' : '/'} replace />;
 }
 
-function Root() {
+function AppShell() {
   const { loading, isAuthenticated } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
-  return isAuthenticated ? <ChatScreen /> : <LoginScreen />;
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
+
+  return (
+    <div className="flex h-dvh w-dvw overflow-hidden bg-[var(--app-bg)]">
+      <SideNav />
+      <div className="flex min-h-0 flex-1 flex-col w-full">
+        <AppHeader />
+        <div className="min-h-0 flex-1 w-full">
+          <Outlet />
+        </div>
+        <BottomNav />
+      </div>
+    </div>
+  );
 }
 
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <Root />,
+    element: <AppShell />,
+    children: [
+      { index: true, element: <ChatScreen /> },
+      { path: 'nutricion', element: <NutritionPage /> },
+      { path: 'productos', element: <ProductsPage /> },
+      { path: 'ejercicio', element: <ExercisePage /> },
+      { path: 'peso', element: <WeightPage /> },
+      { path: 'metas', element: <GoalsPage /> },
+      { path: 'perfil', element: <ProfilePage /> },
+    ],
   },
   {
     // Must match the SPA redirect URI registered in the Entra app registration.

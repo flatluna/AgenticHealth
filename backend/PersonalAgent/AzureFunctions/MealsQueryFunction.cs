@@ -95,7 +95,7 @@ public sealed class MealsQueryFunction
 
         try
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
 
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
             var mealEntities = await db.MealLogs
@@ -167,7 +167,7 @@ public sealed class MealsQueryFunction
 
         try
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
 
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
             var deletedRows = await db.MealLogs

@@ -30,8 +30,12 @@ public sealed class GoalsAgent
           aceptados (déficit/superávit calórico razonable, ritmo de cambio de peso saludable
           de 0.5-1 kg/semana, al menos 150 min/semana de actividad moderada, etc.). Si se te
           da un resumen de investigación web, úsalo como referencia adicional.
-        - Adapta TODO al perfil dado (peso, estatura, IMC, nivel de actividad) y a los
-          objetivos concretos que el usuario haya escrito.
+        - Adapta TODO al perfil dado (peso, estatura, IMC, edad, nivel de actividad) y a los
+          objetivos concretos que el usuario haya escrito. El plan de ejercicio en particular
+          NO debe ser genérico: ajusta intensidad, tipo de ejercicio, progresión y frecuencia
+          según la edad de la persona y si su nivel de actividad actual es sedentario o no
+          (p. ej. una persona sedentaria o de mayor edad empieza con volumen/intensidad más
+          bajos y progresión más gradual que alguien joven y ya activo).
         - No eres un médico ni nutricionista licenciado: para condiciones médicas serias,
           menciona brevemente que debe consultar a un profesional, pero igual da un plan
           general razonable.
@@ -80,7 +84,7 @@ public sealed class GoalsAgent
     public bool IsConfigured => _chatClient is not null;
 
     public async Task<string> GenerateGoalPlanJsonAsync(
-        double weightKg, double heightCm, string activityLevel, string goalsText, CancellationToken cancellationToken = default)
+        double weightKg, double heightCm, string activityLevel, string goalsText, int? age, CancellationToken cancellationToken = default)
     {
         if (_chatClient is null)
         {
@@ -90,8 +94,9 @@ public sealed class GoalsAgent
         var heightM = heightCm / 100.0;
         var bmi = heightM > 0 ? Math.Round(weightKg / (heightM * heightM), 1) : 0;
 
+        var ageSegment = age is > 0 ? $" Edad: {age} años." : string.Empty;
         var profileSummary =
-            $"Peso actual: {weightKg} kg. Estatura: {heightCm} cm. IMC: {bmi}. " +
+            $"Peso actual: {weightKg} kg. Estatura: {heightCm} cm. IMC: {bmi}.{ageSegment} " +
             $"Nivel de actividad: {activityLevel}. Objetivos del usuario: {goalsText}";
 
         string? research = null;

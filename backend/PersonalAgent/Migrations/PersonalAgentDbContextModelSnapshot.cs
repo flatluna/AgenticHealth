@@ -91,6 +91,9 @@ namespace PersonalAgent.Migrations
                     b.Property<int>("PersonId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("PersonalExerciseId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("RecordedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -98,7 +101,87 @@ namespace PersonalAgent.Migrations
 
                     b.HasIndex("PersonId");
 
+                    b.HasIndex("PersonalExerciseId");
+
                     b.ToTable("ExerciseLogs");
+                });
+
+            modelBuilder.Entity("PersonalAgent.Data.FoodItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Brand")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double?>("CalciumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("Calories")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("CarbsGrams")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<double?>("FatGrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("FiberGrams")
+                        .HasColumnType("float");
+
+                    b.Property<string>("IngredientsText")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double?>("IronMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("MagnesiumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<string>("MatchKey")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double?>("PotassiumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("ProteinGrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SaturatedFatGrams")
+                        .HasColumnType("float");
+
+                    b.Property<string>("ServingSize")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double?>("SodiumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SugarGrams")
+                        .HasColumnType("float");
+
+                    b.Property<int>("TimesLogged")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("VitaminAMicrograms")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchKey")
+                        .IsUnique();
+
+                    b.ToTable("FoodItems");
                 });
 
             modelBuilder.Entity("PersonalAgent.Data.Goal", b =>
@@ -257,6 +340,9 @@ namespace PersonalAgent.Migrations
                     b.Property<double?>("FiberGrams")
                         .HasColumnType("float");
 
+                    b.Property<int?>("FoodItemId")
+                        .HasColumnType("int");
+
                     b.Property<double?>("IronMilligrams")
                         .HasColumnType("float");
 
@@ -269,6 +355,9 @@ namespace PersonalAgent.Migrations
                         .HasColumnType("nvarchar(20)");
 
                     b.Property<int>("PersonId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PersonalFoodItemId")
                         .HasColumnType("int");
 
                     b.Property<double?>("PotassiumMilligrams")
@@ -300,7 +389,11 @@ namespace PersonalAgent.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FoodItemId");
+
                     b.HasIndex("PersonId");
+
+                    b.HasIndex("PersonalFoodItemId");
 
                     b.ToTable("MealLogs");
                 });
@@ -317,6 +410,12 @@ namespace PersonalAgent.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int?>("Age")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AzureObjectId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -332,7 +431,128 @@ namespace PersonalAgent.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AzureObjectId")
+                        .IsUnique()
+                        .HasFilter("[AzureObjectId] IS NOT NULL");
+
                     b.ToTable("People");
+                });
+
+            modelBuilder.Entity("PersonalAgent.Data.PersonalExercise", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("CaloriesBurned")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("PersonId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TimesLogged")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("PersonalExercises");
+                });
+
+            modelBuilder.Entity("PersonalAgent.Data.PersonalFoodItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("CalciumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("Calories")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("CarbsGrams")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double?>("FatGrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("FiberGrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("IronMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("MagnesiumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("PersonId")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("PotassiumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("ProteinGrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SaturatedFatGrams")
+                        .HasColumnType("float");
+
+                    b.Property<string>("ServingSize")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double?>("SodiumMilligrams")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SugarGrams")
+                        .HasColumnType("float");
+
+                    b.Property<int>("TimesLogged")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("VitaminAMicrograms")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("PersonalFoodItems");
                 });
 
             modelBuilder.Entity("PersonalAgent.Data.UserProfile", b =>
@@ -413,7 +633,13 @@ namespace PersonalAgent.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PersonalAgent.Data.PersonalExercise", "PersonalExercise")
+                        .WithMany()
+                        .HasForeignKey("PersonalExerciseId");
+
                     b.Navigation("Person");
+
+                    b.Navigation("PersonalExercise");
                 });
 
             modelBuilder.Entity("PersonalAgent.Data.Goal", b =>
@@ -459,8 +685,43 @@ namespace PersonalAgent.Migrations
 
             modelBuilder.Entity("PersonalAgent.Data.MealLog", b =>
                 {
+                    b.HasOne("PersonalAgent.Data.FoodItem", "FoodItem")
+                        .WithMany()
+                        .HasForeignKey("FoodItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("PersonalAgent.Data.Person", "Person")
                         .WithMany("MealLogs")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PersonalAgent.Data.PersonalFoodItem", "PersonalFoodItem")
+                        .WithMany()
+                        .HasForeignKey("PersonalFoodItemId");
+
+                    b.Navigation("FoodItem");
+
+                    b.Navigation("Person");
+
+                    b.Navigation("PersonalFoodItem");
+                });
+
+            modelBuilder.Entity("PersonalAgent.Data.PersonalExercise", b =>
+                {
+                    b.HasOne("PersonalAgent.Data.Person", "Person")
+                        .WithMany("PersonalExercises")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("PersonalAgent.Data.PersonalFoodItem", b =>
+                {
+                    b.HasOne("PersonalAgent.Data.Person", "Person")
+                        .WithMany("PersonalFoodItems")
                         .HasForeignKey("PersonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -509,6 +770,10 @@ namespace PersonalAgent.Migrations
                     b.Navigation("Goals");
 
                     b.Navigation("MealLogs");
+
+                    b.Navigation("PersonalExercises");
+
+                    b.Navigation("PersonalFoodItems");
 
                     b.Navigation("WeightLogs");
                 });

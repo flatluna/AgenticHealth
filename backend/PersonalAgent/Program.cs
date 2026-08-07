@@ -35,6 +35,10 @@ var host = new HostBuilder()
         // Bing-grounded live nutrition lookups (Azure AI Foundry Agent Service).
         services.AddSingleton<BingFoodSearchProvider>();
 
+        // Edamam's hosted Food MCP server - direct structured nutrition API, preferred over
+        // Bing when configured since it skips the LLM-agent thread/run cycle entirely.
+        services.AddSingleton<EdamamFoodSearchProvider>();
+
         // Bing-grounded nutrition/exercise plan research for the Objetivos page.
         services.AddSingleton<BingPlanSearchProvider>();
 
@@ -43,6 +47,14 @@ var host = new HostBuilder()
 
         // Resolves the single "default" person row used by this MVP (no auth yet).
         services.AddSingleton<DefaultPersonProvider>();
+
+        // Lets DietAgent publish "still working on ingredient X" lines while a multi-item
+        // meal's Bing lookups run, polled by the frontend via GET /api/agent/progress.
+        services.AddSingleton<AgentProgressTracker>();
+
+        // Holds the last meal DietAgent proposed in chat (nutrition breakdown) so the
+        // frontend can render "Agregar a comida de hoy"/"Guardar en mi catálogo" buttons.
+        services.AddSingleton<PendingMealTracker>();
 
         // Lightweight auth support for the landing page + profile flow.
         services.AddOptions<AuthenticationSettings>();
@@ -54,6 +66,7 @@ var host = new HostBuilder()
         services.AddSingleton<AdvisorAgent>();
         services.AddSingleton<OrchestratorAgent>();
         services.AddSingleton<GoalsAgent>();
+        services.AddSingleton<FoodLabelExtractionAgent>();
     })
     .Build();
 

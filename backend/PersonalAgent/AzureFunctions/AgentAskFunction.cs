@@ -1,25 +1,35 @@
+using System.Linq;
 using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using PersonalAgent.Agents;
+using PersonalAgent.Common;
 
 namespace PersonalAgent.AzureFunctions;
 
 public sealed class AgentAskFunction
 {
     private readonly OrchestratorAgent _orchestrator;
+    private readonly AgentProgressTracker _progressTracker;
+    private readonly PendingMealTracker _pendingMealTracker;
     private readonly ILogger<AgentAskFunction> _logger;
 
-    public AgentAskFunction(OrchestratorAgent orchestrator, ILogger<AgentAskFunction> logger)
+    public AgentAskFunction(
+        OrchestratorAgent orchestrator,
+        AgentProgressTracker progressTracker,
+        PendingMealTracker pendingMealTracker,
+        ILogger<AgentAskFunction> logger)
     {
         _orchestrator = orchestrator;
+        _progressTracker = progressTracker;
+        _pendingMealTracker = pendingMealTracker;
         _logger = logger;
     }
 
     public sealed record AskRequest(string Message, string? SessionId, string? UserName);
 
-    public sealed record AskResponse(string Reply, string SessionId);
+    public sealed record AskResponse(string Reply, string SessionId, PendingMealDto? PendingMeal);
 
     [Function("AgentAsk")]
     public async Task<HttpResponseData> RunAsync(
@@ -58,13 +68,38 @@ public sealed class AgentAskFunction
 
         try
         {
-            var reply = await _orchestrator.AskAsync(body.Message, sessionId, body.UserName, cancellationToken);
-            return await FunctionResponseFactory.SuccessResponseAsync(request, new AskResponse(reply, sessionId));
+            var azureObjectId = request.Headers.TryGetValues("x-msal-user", out var values) ? values.FirstOrDefault() : null;
+            var reply = await _orchestrator.AskAsync(body.Message, sessionId, azureObjectId, body.UserName, cancellationToken);
+            var pendingMeal = _pendingMealTracker.Take(sessionId);
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new AskResponse(reply, sessionId, pendingMeal));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "AgentAsk failed");
             return await FunctionResponseFactory.ErrorResponseAsync(request, "Ocurrió un error al procesar la petición.", HttpStatusCode.InternalServerError);
         }
+    }
+
+    public sealed record AgentProgressResponse(IReadOnlyList<string> Messages);
+
+    /// <summary>GET /api/agent/progress?sessionId=X - drains any short status lines
+    /// published so far for this session (e.g. one per ingredient as DietAgent's parallel
+    /// Bing searches resolve), so the frontend can poll this while POST /api/agent/ask is
+    /// still in flight and show them as a "still working..." trail.</summary>
+    [Function("AgentProgress")]
+    public async Task<HttpResponseData> GetProgressAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "agent/progress")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(request.Url.Query);
+        var sessionId = query["sessionId"];
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Falta el parámetro 'sessionId'.", HttpStatusCode.BadRequest);
+        }
+
+        var messages = _progressTracker.Drain(sessionId);
+        return await FunctionResponseFactory.SuccessResponseAsync(request, new AgentProgressResponse(messages));
     }
 }

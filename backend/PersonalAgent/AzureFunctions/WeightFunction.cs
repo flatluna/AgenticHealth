@@ -58,7 +58,7 @@ public sealed class WeightFunction
 
         try
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
             var logs = await db.WeightLogs
@@ -118,7 +118,7 @@ public sealed class WeightFunction
 
         try
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
             var entry = new WeightLog { PersonId = personId, WeightKg = body.WeightKg, RecordedAtUtc = recordedAt };
@@ -165,7 +165,7 @@ public sealed class WeightFunction
 
         try
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
 
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
             var deletedRows = await db.WeightLogs

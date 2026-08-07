@@ -31,27 +31,119 @@ public sealed class VoiceChatSessionFunction
         real con el usuario. Hablas español de forma natural, cálida y conversacional.
 
         Reglas importantes para voz:
+        - REGLA CRÍTICA, SIN EXCEPCIONES: cada vez que el usuario diga que consumió/comió
+          algo (ej. "me comí una manzana", "hoy almorcé arroz con pollo"), DEBES buscar en
+          ESTE ORDEN, EN ESE MISMO TURNO, ANTES de responder: primero "search_personal_catalog"
+          (catálogo del propio usuario), luego si no hay coincidencia "search_food_catalog"
+          (catálogo global de productos escaneados), y solo si ninguna de las dos encuentra
+          nada, "search_food_nutrition" (búsqueda web, que internamente prioriza Edamam y
+          cae a Bing) - sin importar qué tan genérico o reconocible te parezca el alimento,
+          ni si crees saber sus calorías de memoria. NUNCA llames a "search_food_nutrition"
+          como primer paso al reportar una comida; siempre deben intentarse primero los dos
+          catálogos, en ese orden. Solo salta directo a "search_food_nutrition" cuando el
+          usuario haga una pregunta puramente informativa sin decir que lo comió (ver regla
+          de preguntas informativas más abajo).
+        - REGLA CRÍTICA, SIN EXCEPCIONES: por pausas naturales al hablar, el usuario a veces
+          describe una comida compuesta en varias frases seguidas en vez de una sola (ej.
+          dice "espagueti blanco" y, un momento después, agrega "más dos huevos estrellados
+          con mantequilla"). NUNCA trates la primera frase como la comida completa ni llames
+          a ninguna herramienta de búsqueda con solo ese primer componente - antes de buscar,
+          asegúrate de que el usuario terminó de enumerar todo lo que comió (si acaba de
+          nombrar un solo alimento suelto y podría seguir agregando más, puedes confirmar en
+          voz corto, ej. "¿algo más además del espagueti?"). Si ya buscaste con un conjunto
+          de componentes y el usuario agrega más justo después (misma comida, no un tema
+          nuevo), NO hagas una búsqueda separada para lo nuevo: vuelve a llamar a la
+          herramienta correspondiente con la lista COMPLETA actualizada (todos los
+          componentes ya mencionados más los nuevos) para obtener un total correcto de toda
+          la comida, y descarta el resultado parcial anterior.
         - Da respuestas CORTAS y directas, como en una conversación hablada real (1-3
           frases). Nunca uses listas con viñetas, markdown, ni texto largo tipo artículo.
         - Puedes conversar sobre dieta, nutrición, calorías, ejercicio, hábitos saludables
           y preguntas generales de bienestar.
+        - Cuando el usuario solo PREGUNTE por las calorías o el valor nutricional de un
+          alimento (sin decir que lo comió, ej. "¿cuántas calorías tiene un Big Mac?",
+          "¿es saludable la pizza?"), NUNCA respondas solo con tu conocimiento propio:
+          primero di en voz una frase corta de espera (ej. "Dame un segundo, lo busco…") y
+          llama a "search_food_nutrition" (con "foodDescriptions" EN INGLÉS, formato
+          conciso, un elemento por componente) para verificar el dato en tiempo real. Cuando
+          tengas el resultado, responde mencionando SIEMPRE de dónde salió el dato usando
+          el campo "source" de cada elemento (ej. "Según el sitio oficial de McDonald's, un
+          Big Mac tiene unas 550 calorías"). Si "source" viene vacío o la búsqueda falla,
+          dilo explícitamente (ej. "no encontré una fuente confiable, esto es una estimación
+          mía") en vez de presentarlo como un dato verificado. Esta regla aplica siempre
+          que se mencione un alimento con marca/cadena específica (McDonald's, Burger
+          King, etc.) o cualquier alimento cuyo valor calórico se pueda buscar.
         - Cuando el usuario diga que consumió/comió algo (ej. "me comí una manzana"), sigue
-          este flujo en DOS pasos - NUNCA llames a "log_meal" apenas te lo diga:
-          1) ANTES de llamar a "search_food_nutrition", di primero en voz una frase corta
+          este flujo en CUATRO pasos - NUNCA llames a "log_meal" apenas te lo diga:
+          0) Como ya dice la regla crítica de arriba, llama PRIMERO a
+             "search_personal_catalog" con lo que dijo (esta herramienta es instantánea,
+             no hace falta frase de espera). Es el catálogo personal del propio usuario
+             (cosas que ya guardó antes, ej. "mi ensalada de siempre", "el batido que
+             preparo en las mañanas"). Si devuelve una o más coincidencias claras, usa la
+             de mejor coincidencia directamente (son datos que el usuario ya confirmó antes,
+             no hace falta volver a buscarlos en la web) - dile en voz que lo encontraste en
+             su catálogo (ej. "Encontré tu ensalada de siempre en tu catálogo: 320
+             calorías") y salta directo al paso 3 usando su "personalFoodItemId". Solo si
+             no hay ninguna coincidencia razonable, continúa al paso 1.
+          1) Llama a "search_food_catalog" (también instantánea, sin frase de espera) - es
+             el catálogo GLOBAL de productos escaneados por cualquier usuario. Si devuelve
+             una o más coincidencias claras, usa la de mejor coincidencia directamente (son
+             datos reales de etiqueta, no una estimación) - dile en voz que lo encontraste
+             en nuestro catálogo de productos (ej. "Encontré Coca-Cola 355ml en nuestro
+             catálogo: 140 calorías") y salta directo al paso 3. Solo si tampoco aquí hay
+             coincidencia, continúa al paso 2.
+          2) ANTES de llamar a "search_food_nutrition", di primero en voz una frase corta
              de espera (ej. "Dame un segundo, estoy verificando los datos…" o "Déjame
              confirmar eso…") y RECIÉN DESPUÉS llama a la herramienta - la búsqueda tarda
              varios segundos, así que nunca te quedes en silencio mientras esperas su
-             resultado. Usa esta herramienta para obtener datos reales y actualizados de
-             ese alimento, incluso si el usuario ya mencionó un número de calorías - esa
-             búsqueda es la fuente de verdad, no confíes en tu propio conocimiento ni en el
-             número del usuario para evitar inventar datos. Si la búsqueda falla, dilo
+             resultado. Descompón la comida en sus componentes y pásalos TODOS juntos en
+             "foodDescriptions" EN INGLÉS y en formato conciso "<cantidad><unidad>
+             <alimento>" (ej. ["100g cooked spaghetti", "1 tbsp butter", "2 large fried
+             eggs"]) - NUNCA una frase descriptiva larga en español como un solo elemento,
+             ya que confunde la búsqueda nutricional y produce datos incorrectos; incluso un
+             solo alimento va en un arreglo de un elemento. Si la comida tiene VARIOS
+             componentes, acláralo en esa misma frase de espera (ej. "Dame un momento, cada
+             ingrediente tarda un poco en buscarse…") para que el usuario entienda por qué
+             tarda más que con un solo alimento. Usa esta herramienta para obtener datos
+             reales y actualizados, incluso si el usuario ya mencionó un número de calorías
+             - esa búsqueda es la fuente de verdad, no confíes en tu propio conocimiento ni
+             en el número del usuario para evitar inventar datos. Si la búsqueda falla, dilo
              brevemente y usa tu mejor estimación dejando claro que es aproximada.
-          2) Dile en voz corta qué entendiste que comió y lo esencial (calorías y algún
-             macro relevante), y PREGÚNTALE si quiere que lo agregues a su registro de hoy
-             (ej. "¿Quieres que lo agregue a tu consumo de hoy?"). Espera su respuesta.
+          3) Si "search_food_nutrition" devolvió varios elementos (uno por componente), SUMA
+             tú mismo calorías/proteinGrams/carbsGrams/fatGrams/etc. de todos antes de
+             reportar el total. ANTES de reportar, revisa que cada componente sea
+             razonable para la cantidad descrita (ej. un puñado de cuadritos o una
+             guarnición pequeña NUNCA debería dar miles de calorías) - si un componente
+             se ve absurdamente alto o desproporcionado frente al resto de la comida, NO
+             lo uses tal cual: descártalo y usa tu propio conocimiento como estimación
+             razonable para ese componente en su lugar, aclarando en voz que es una
+             estimación tuya y no el dato buscado. Dile en voz corta qué entendiste que
+             comió y lo esencial (calorías y algún macro relevante) usando TODOS los
+             campos nutricionales obtenidos (calories, proteinGrams, carbsGrams,
+             fatGrams, etc.), no solo calorías; si los datos vinieron de
+             "search_food_nutrition" MENCIONA brevemente de dónde salió el dato usando
+             el campo "source" de cada componente (ej. "Según Edamam, tiene unas 550
+             calorías") - si vinieron de "search_personal_catalog" o "search_food_catalog"
+             no hace falta citar fuente, ya son datos verificados de antes. Si "source"
+             viene vacío o usaste tu propio conocimiento, dilo (ej. "esto es una
+             estimación mía, no encontré una fuente
+             confiable"). Nunca des un dato buscado en internet sin decir de dónde salió.
+             Luego PREGÚNTALE si quiere que lo agregues a su registro de hoy (ej. "¿Quieres
+             que lo agregue a tu consumo de hoy?"). Espera su respuesta.
           Solo cuando el usuario confirme afirmativamente en su siguiente mensaje (ej. "sí",
-          "dale", "agrégalo"), usa "log_meal" con los datos obtenidos en el paso 1. Si dice
+          "dale", "agrégalo"): si el dato vino de "search_personal_catalog" (paso 0), usa
+          "log_personal_catalog_item" con el "personalFoodItemId" encontrado; si vino de
+          "search_food_catalog" (paso 1) o "search_food_nutrition" (paso 2), usa "log_meal"
+          con los datos obtenidos. Si dice
           que no o cambia de tema, no registres nada.
+        - Justo DESPUÉS de registrar con éxito una comida vía "log_meal" (es decir, una
+          comida NUEVA que no vino de "search_personal_catalog" - si ya vino del catálogo
+          personal no hace falta volver a guardarla), pregúntale en voz, corto, si quiere
+          guardarla en su catálogo personal para la próxima vez (ej. "¿Quieres que la
+          guarde en tu catálogo para la próxima vez?"). Solo si confirma afirmativamente en
+          su siguiente mensaje, llama a "save_to_personal_catalog" con el mismo nombre y
+          datos nutricionales usados en "log_meal". Si dice que no, sigue sin problema - no
+          insistas de nuevo por el resto de la conversación con esa misma comida.
         - No le preguntas al usuario datos nutricionales técnicos (calorías, proteína,
           etc.) - eso lo resuelves tú con las herramientas o tu conocimiento. Solo pregunta
           si falta información esencial como QUÉ comió, CUÁNTO (porción) o CUÁNDO.
@@ -71,8 +163,10 @@ public sealed class VoiceChatSessionFunction
           búsqueda no los trajo - nunca los dejes vacíos. El parámetro "sourceBreakdown" es
           OBLIGATORIO en TODA llamada a "log_meal", nunca lo omitas: si la comida tiene
           varios componentes (ej. "pan con mantequilla"), llena un desglose corto por
-          ingrediente y su fuente (ej. "Pan: 80 kcal (Bing); Mantequilla: 40 kcal (Bing)");
-          si es un solo alimento, escribe una sola frase igual de corta con su fuente (ej.
+          ingrediente y su fuente ESPECÍFICA tomada del campo "source" de la búsqueda (ej.
+          "Pan: 80 kcal (USDA FoodData Central); Mantequilla: 40 kcal (estimado)"), nunca
+          solo "Bing" genérico; si es un solo alimento, escribe una sola frase igual de
+          corta con su fuente específica (ej.
           "Manzana mediana: 95 kcal (Bing)") - no hace falta decirlo en voz, es solo para
           el registro escrito.
         - Después de registrar una comida (solo tras la confirmación del usuario), confirma
@@ -180,8 +274,57 @@ public sealed class VoiceChatSessionFunction
         {
             ["type"] = "function",
             ["name"] = "search_food_nutrition",
-            ["description"] = "Busca en la web (Bing) la información nutricional completa de un alimento: calorías, " +
-                "macros (proteína, carbohidratos, grasa) y micronutrientes comunes. Devuelve un JSON.",
+            ["description"] = "Busca en la web la información nutricional completa de uno o varios alimentos EN " +
+                "UNA SOLA LLAMADA: calorías, macros (proteína, carbohidratos, grasa), micronutrientes comunes y " +
+                "la fuente exacta de donde salió el dato (campos 'source'/'sourceUrl', ej. 'Sitio oficial de " +
+                "McDonald's'). Interna y automáticamente usa primero Edamam (rápida, 1-3s) por CADA componente y " +
+                "solo si un componente falla cae a Bing (más lenta) para ese componente - no necesitas elegir " +
+                "cuál, solo llama a esta única herramienta. Devuelve un arreglo JSON en el mismo orden que " +
+                "'foodDescriptions', cada elemento con un campo 'query' que repite el alimento buscado - si la " +
+                "comida tiene varios componentes, SUMA tú mismo calorías/macros/micronutrientes de todos los " +
+                "elementos antes de reportar el total. Úsala SIEMPRE que el usuario pregunte por calorías/" +
+                "nutrición de un alimento, o cuando reporte haberlo comido y ni 'search_personal_catalog' ni " +
+                "'search_food_catalog' hayan encontrado coincidencia.",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["foodDescriptions"] = new JsonObject
+                    {
+                        ["type"] = "array",
+                        ["items"] = new JsonObject { ["type"] = "string" },
+                        ["description"] = "Alimentos a buscar, uno por elemento, EN INGLÉS y en formato conciso " +
+                            "\"<cantidad><unidad> <alimento>\" (ej. [\"100g cooked spaghetti\", \"1 tbsp butter\", " +
+                            "\"2 large fried eggs\"]) - NUNCA frases descriptivas largas ni en español, ya que " +
+                            "confunden la búsqueda nutricional. Para piezas pequeñas o conteos informales " +
+                            "(cuadritos, trozos, dados, rebanadas pequeñas) SIEMPRE convierte a un peso estimado " +
+                            "en GRAMOS en vez de dejar el conteo (ej. en lugar de \"8 cubes fried tofu\" usa algo " +
+                            "como \"80g fried tofu\" estimando ~10g por cuadrito) - un conteo de piezas pequeñas " +
+                            "confunde al buscador, que puede interpretar cada pieza como una porción completa e " +
+                            "inflar el resultado muchísimo (ej. miles de calorías para un puñado de cuadritos). " +
+                            "Incluye TODOS los componentes de la comida en esta única llamada, incluso si es un " +
+                            "solo alimento (arreglo de un elemento)."
+                    }
+                },
+                ["required"] = new JsonArray("foodDescriptions")
+            }
+        };
+
+        var searchFoodCatalogTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "search_food_catalog",
+            ["description"] = "Busca en NUESTRO PROPIO catálogo de productos (base de datos GLOBAL compartida por " +
+                "todos los usuarios, alimentada al escanear etiquetas de nutrición reales) por nombre o marca, ej. " +
+                "'Coca-Cola' o 'yogurt griego Chobani'. Instantánea, sin costo de espera. Úsala SIEMPRE en segundo " +
+                "lugar, justo después de 'search_personal_catalog' y ANTES de 'search_food_nutrition', cuando el " +
+                "usuario diga que comió/consumió algo y su catálogo personal no tuvo coincidencia - si encuentra " +
+                "una coincidencia clara, esos datos vienen de una etiqueta real (no una búsqueda web) y son la " +
+                "fuente de verdad, no hace falta buscar en la web. Devuelve un JSON con una lista de coincidencias " +
+                "(name, brand, servingSize, calories, proteinGrams, carbsGrams, fatGrams, saturatedFatGrams, " +
+                "sugarGrams, fiberGrams, sodiumMilligrams, potassiumMilligrams, calciumMilligrams, ironMilligrams, " +
+                "magnesiumMilligrams, vitaminAMicrograms, timesLogged) o un mensaje si no encontró nada.",
             ["parameters"] = new JsonObject
             {
                 ["type"] = "object",
@@ -190,10 +333,107 @@ public sealed class VoiceChatSessionFunction
                     ["foodDescription"] = new JsonObject
                     {
                         ["type"] = "string",
-                        ["description"] = "Nombre o descripción del alimento, ej. 'una manzana mediana'."
+                        ["description"] = "Nombre o marca del producto, tal cual lo dijo el usuario."
                     }
                 },
                 ["required"] = new JsonArray("foodDescription")
+            }
+        };
+
+        var searchPersonalCatalogTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "search_personal_catalog",
+            ["description"] = "Busca en el catálogo PERSONAL del propio usuario (cosas que él mismo guardó antes, " +
+                "ej. 'mi ensalada de siempre', 'el batido que preparo en las mañanas') por nombre/descripción. " +
+                "Instantánea, sin costo de espera. Úsala SIEMPRE PRIMERO, antes de 'search_food_nutrition', " +
+                "cuando el usuario diga que comió/consumió algo - si encuentra una coincidencia clara, esos datos " +
+                "ya fueron confirmados antes por el usuario y son la fuente de verdad, no hace falta re-buscar en " +
+                "la web. Devuelve un JSON con una lista de coincidencias, CADA UNA con TODOS los datos " +
+                "nutricionales completos (personalFoodItemId, name, description, servingSize, calories, " +
+                "proteinGrams, carbsGrams, fatGrams, saturatedFatGrams, sugarGrams, fiberGrams, " +
+                "sodiumMilligrams, potassiumMilligrams, calciumMilligrams, ironMilligrams, magnesiumMilligrams, " +
+                "vitaminAMicrograms, timesLogged) - usa esos campos directamente, no solo 'calories', o un " +
+                "mensaje si no encontró nada.",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["foodDescription"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Lo que dijo el usuario que comió/consumió, tal cual, ej. 'mi ensalada de siempre'."
+                    }
+                },
+                ["required"] = new JsonArray("foodDescription")
+            }
+        };
+
+        var logPersonalCatalogItemTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "log_personal_catalog_item",
+            ["description"] = "Registra en el consumo de hoy un alimento encontrado con 'search_personal_catalog', " +
+                "reusando sus datos nutricionales ya guardados (no hace falta volver a pasarlos). SOLO debe " +
+                "llamarse después de que el usuario haya confirmado explícitamente que quiere agregarlo.",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["personalFoodItemId"] = new JsonObject
+                    {
+                        ["type"] = "integer",
+                        ["description"] = "El 'personalFoodItemId' de la coincidencia elegida, obtenido de 'search_personal_catalog'."
+                    },
+                    ["mealType"] = new JsonObject { ["type"] = "string", ["description"] = "breakfast, lunch, dinner o snack." },
+                    ["quantity"] = new JsonObject
+                    {
+                        ["type"] = "number",
+                        ["description"] = "Cuántas porciones consumió, si dijo más de una (ej. 2). Si se omite, se usa 1."
+                    },
+                    ["consumedAtIso"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Hora en que se consumió, ISO 8601. Si se omite, se usa la hora actual."
+                    }
+                },
+                ["required"] = new JsonArray("personalFoodItemId", "mealType")
+            }
+        };
+
+        var saveToPersonalCatalogTool = new JsonObject
+        {
+            ["type"] = "function",
+            ["name"] = "save_to_personal_catalog",
+            ["description"] = "Guarda un alimento recién registrado (vía 'log_meal') en el catálogo PERSONAL del " +
+                "usuario, para que la próxima vez se encuentre instantáneamente con 'search_personal_catalog' sin " +
+                "volver a buscarlo en la web. SOLO debe llamarse después de que el usuario haya confirmado " +
+                "explícitamente que quiere guardarlo - nunca automáticamente.",
+            ["parameters"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["name"] = new JsonObject { ["type"] = "string", ["description"] = "Nombre corto y genérico, ej. 'Ensalada de siempre'." },
+                    ["description"] = new JsonObject { ["type"] = "string", ["description"] = "Descripción breve opcional." },
+                    ["servingSize"] = new JsonObject { ["type"] = "string" },
+                    ["calories"] = new JsonObject { ["type"] = "number" },
+                    ["proteinGrams"] = new JsonObject { ["type"] = "number" },
+                    ["carbsGrams"] = new JsonObject { ["type"] = "number" },
+                    ["fatGrams"] = new JsonObject { ["type"] = "number" },
+                    ["saturatedFatGrams"] = new JsonObject { ["type"] = "number" },
+                    ["sugarGrams"] = new JsonObject { ["type"] = "number" },
+                    ["fiberGrams"] = new JsonObject { ["type"] = "number" },
+                    ["sodiumMilligrams"] = new JsonObject { ["type"] = "number" },
+                    ["potassiumMilligrams"] = new JsonObject { ["type"] = "number" },
+                    ["calciumMilligrams"] = new JsonObject { ["type"] = "number" },
+                    ["ironMilligrams"] = new JsonObject { ["type"] = "number" },
+                    ["magnesiumMilligrams"] = new JsonObject { ["type"] = "number" },
+                    ["vitaminAMicrograms"] = new JsonObject { ["type"] = "number" }
+                },
+                ["required"] = new JsonArray("name", "calories")
             }
         };
 
@@ -350,6 +590,16 @@ public sealed class VoiceChatSessionFunction
             }
         };
 
-        return new JsonArray(searchFoodTool, logMealTool, getRecentMealsTool, askHealthAdvisorTool, logExerciseTool, deleteMealTool);
+        return new JsonArray(
+            searchFoodTool,
+            searchFoodCatalogTool,
+            searchPersonalCatalogTool,
+            logPersonalCatalogItemTool,
+            saveToPersonalCatalogTool,
+            logMealTool,
+            getRecentMealsTool,
+            askHealthAdvisorTool,
+            logExerciseTool,
+            deleteMealTool);
     }
 }

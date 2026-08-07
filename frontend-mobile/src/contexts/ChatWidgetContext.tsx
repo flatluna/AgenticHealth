@@ -1,9 +1,12 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { PendingMeal } from '../api/agentApi';
 
 export interface ChatMessage {
   id: number;
   role: 'user' | 'assistant';
   text: string;
+  /** Only set on assistant messages right after DietAgent proposes a meal - lets ChatPanel render confirmation buttons under this specific message. */
+  pendingMeal?: PendingMeal | null;
 }
 
 let nextMessageId = 1;
@@ -14,7 +17,9 @@ interface ChatWidgetContextValue {
   setVoiceActive: (active: boolean) => void;
   /** Shared across the text panel and the voice modal, so voice transcripts show up in the same history. */
   messages: ChatMessage[];
-  addMessage: (role: ChatMessage['role'], text: string) => void;
+  addMessage: (role: ChatMessage['role'], text: string, pendingMeal?: PendingMeal | null) => void;
+  /** Clears pendingMeal off a message once its buttons have been acted on, so they don't stay clickable/re-triggerable. */
+  clearPendingMeal: (messageId: number) => void;
 }
 
 const ChatWidgetContext = createContext<ChatWidgetContextValue | undefined>(undefined);
@@ -36,8 +41,10 @@ export function ChatWidgetProvider({ children }: { children: ReactNode }) {
       isVoiceActive,
       setVoiceActive,
       messages,
-      addMessage: (role: ChatMessage['role'], text: string) =>
-        setMessages((prev) => [...prev, { id: nextMessageId++, role, text }]),
+      addMessage: (role: ChatMessage['role'], text: string, pendingMeal?: PendingMeal | null) =>
+        setMessages((prev) => [...prev, { id: nextMessageId++, role, text, pendingMeal }]),
+      clearPendingMeal: (messageId: number) =>
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, pendingMeal: null } : m))),
     }),
     [isVoiceActive, messages],
   );

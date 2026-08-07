@@ -60,5 +60,15 @@ public sealed class MealLog
     /// </summary>
     public string? SourceBreakdown { get; set; }
 
+    /// <summary>Link to the global FoodItem this meal was logged from (e.g. a scanned nutrition label), if any - null for meals logged via chat/voice/manual entry.</summary>
+    public int? FoodItemId { get; set; }
+
+    public FoodItem? FoodItem { get; set; }
+
+    /// <summary>Link to the person's own catalog entry (Data/PersonalFoodItem.cs), if this meal was logged from "Mi catálogo" instead of chat/voice/manual entry.</summary>
+    public int? PersonalFoodItemId { get; set; }
+
+    public PersonalFoodItem? PersonalFoodItem { get; set; }
+
     public DateTime RecordedAtUtc { get; set; } = DateTime.UtcNow;
 }

@@ -1,10 +1,11 @@
 import axios from 'axios';
-import { apiBaseUrl } from '../config/api';
+import { apiBaseUrl, attachAuthHeader } from '../config/api';
 
 const apiClient = axios.create({
   baseURL: apiBaseUrl,
   headers: { 'Content-Type': 'application/json' },
 });
+attachAuthHeader(apiClient);
 
 export interface VoiceChatSession {
   clientSecret: string;
@@ -31,12 +32,58 @@ export async function executeLogMealTool(args: Record<string, unknown>): Promise
 }
 
 /** Executes the "search_food_nutrition" Realtime tool on behalf of the browser. */
-export async function executeSearchFoodTool(foodDescription: string): Promise<{ result: string }> {
+export async function executeSearchFoodTool(foodDescriptions: string[]): Promise<{ result: string }> {
   const { data } = await apiClient.post<{ result: string }>(
     '/voice/tools/search-food',
-    { foodDescription },
-    { timeout: 20000 },
+    { foodDescriptions },
+    { timeout: 30000 },
   );
+  return data;
+}
+
+/**
+ * Executes the "search_food_catalog" Realtime tool - looks up our own GLOBAL product
+ * catalog (shared across all users, populated by scanning nutrition labels) so a
+ * previously-scanned product can be reused instead of re-searching the web.
+ */
+export async function executeSearchFoodCatalogTool(foodDescription: string): Promise<{ result: string }> {
+  const { data } = await apiClient.post<{ result: string }>(
+    '/voice/tools/search-food-catalog',
+    { foodDescription },
+    { timeout: 15000 },
+  );
+  return data;
+}
+
+/**
+ * Executes the "search_personal_catalog" Realtime tool - looks up the user's own saved
+ * catalog (same one behind the "Mi catálogo" tab) so a previously-saved item can be reused
+ * instead of re-searching the web.
+ */
+export async function executeSearchPersonalCatalogTool(foodDescription: string): Promise<{ result: string }> {
+  const { data } = await apiClient.post<{ result: string }>(
+    '/voice/tools/search-personal-catalog',
+    { foodDescription },
+    { timeout: 15000 },
+  );
+  return data;
+}
+
+/**
+ * Executes the "log_personal_catalog_item" Realtime tool - logs an item found via
+ * "search_personal_catalog" as a meal, reusing its already-stored nutrition data.
+ */
+export async function executeLogPersonalCatalogItemTool(args: Record<string, unknown>): Promise<{ confirmation: string }> {
+  const { data } = await apiClient.post<{ confirmation: string }>('/voice/tools/log-personal-catalog-item', args, { timeout: 15000 });
+  return data;
+}
+
+/**
+ * Executes the "save_to_personal_catalog" Realtime tool - saves a just-logged food into the
+ * user's own reusable catalog (same as the chat's "Guardar en mi catálogo" button).
+ */
+export async function executeSaveToPersonalCatalogTool(args: Record<string, unknown>): Promise<{ confirmation: string }> {
+  const { data } = await apiClient.post<{ confirmation: string }>('/voice/tools/save-to-personal-catalog', args, { timeout: 15000 });
   return data;
 }
 

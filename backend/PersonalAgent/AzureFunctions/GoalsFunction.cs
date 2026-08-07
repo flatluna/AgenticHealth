@@ -38,7 +38,7 @@ public sealed class GoalsFunction
         _personProvider = personProvider;
     }
 
-    public sealed record GoalsProfileResponse(double? HeightCm, double? WeightKg, string? ActivityLevel);
+    public sealed record GoalsProfileResponse(double? HeightCm, double? WeightKg, string? ActivityLevel, int? Age);
 
     [Function("GoalsProfile")]
     public async Task<HttpResponseData> GetProfileAsync(
@@ -48,10 +48,10 @@ public sealed class GoalsFunction
     {
         if (_dbContextFactory is null || _personProvider is null)
         {
-            return await FunctionResponseFactory.SuccessResponseAsync(request, new GoalsProfileResponse(null, null, null));
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new GoalsProfileResponse(null, null, null, null));
         }
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken);
 
@@ -60,10 +60,11 @@ public sealed class GoalsFunction
             new GoalsProfileResponse(
                 person?.HeightCm is > 0 ? person.HeightCm : null,
                 person?.CurrentWeightKg,
-                person?.ActivityLevel?.ToString()));
+                person?.ActivityLevel?.ToString(),
+                person?.Age));
     }
 
-    public sealed record GoalsProfileSaveRequest(double WeightKg, double HeightCm, string ActivityLevel);
+    public sealed record GoalsProfileSaveRequest(double WeightKg, double HeightCm, string ActivityLevel, int? Age);
 
     /// <summary>
     /// Lightweight save for the "1. Dime tu estado actual" fields - updates weight/height/
@@ -107,7 +108,7 @@ public sealed class GoalsFunction
 
         try
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
             var person = await db.People.FirstAsync(p => p.Id == personId, cancellationToken);
@@ -115,6 +116,7 @@ public sealed class GoalsFunction
             person.HeightCm = body.HeightCm;
             person.CurrentWeightKg = body.WeightKg;
             person.ActivityLevel = activityLevel;
+            person.Age = body.Age;
 
             if (weightChanged)
             {
@@ -125,7 +127,7 @@ public sealed class GoalsFunction
 
             return await FunctionResponseFactory.SuccessResponseAsync(
                 request,
-                new GoalsProfileResponse(person.HeightCm, person.CurrentWeightKg, person.ActivityLevel?.ToString()));
+                new GoalsProfileResponse(person.HeightCm, person.CurrentWeightKg, person.ActivityLevel?.ToString(), person.Age));
         }
         catch (Exception ex)
         {
@@ -134,7 +136,7 @@ public sealed class GoalsFunction
         }
     }
 
-    public sealed record GoalPlanRequest(double WeightKg, double HeightCm, string ActivityLevel, string GoalsText);
+    public sealed record GoalPlanRequest(double WeightKg, double HeightCm, string ActivityLevel, string GoalsText, int? Age);
 
     [Function("GoalsPlanCreate")]
     public async Task<HttpResponseData> CreatePlanAsync(
@@ -173,7 +175,7 @@ public sealed class GoalsFunction
         try
         {
             rawJson = await _goalsAgent.GenerateGoalPlanJsonAsync(
-                body.WeightKg, body.HeightCm, activityLevel.ToString(), body.GoalsText, cancellationToken);
+                body.WeightKg, body.HeightCm, activityLevel.ToString(), body.GoalsText, body.Age, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -198,13 +200,14 @@ public sealed class GoalsFunction
         int? planId = null;
         if (_dbContextFactory is not null && _personProvider is not null)
         {
-            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
             var person = await db.People.FirstAsync(p => p.Id == personId, cancellationToken);
             person.HeightCm = body.HeightCm;
             person.CurrentWeightKg = body.WeightKg;
             person.ActivityLevel = activityLevel;
+            person.Age = body.Age;
 
             db.WeightLogs.Add(new WeightLog { PersonId = personId, WeightKg = body.WeightKg });
 
@@ -247,7 +250,7 @@ public sealed class GoalsFunction
             return await FunctionResponseFactory.SuccessResponseAsync(request, new { plan = (object?)null, planId = (int?)null });
         }
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var latest = await db.GoalPlans
@@ -325,7 +328,7 @@ public sealed class GoalsFunction
             ? DateOnly.FromDateTime(DateTime.UtcNow)
             : DateOnly.Parse(body.CheckInDate);
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var planExists = await db.GoalPlans.AnyAsync(gp => gp.Id == planId && gp.PersonId == personId, cancellationToken);

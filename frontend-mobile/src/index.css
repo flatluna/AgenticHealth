@@ -9,6 +9,19 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* Ensure modals/fixed elements respect viewport in mobile */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
+}
+
 /* Theme system (light default / dark / "azul elegante") - components read these via
    Tailwind arbitrary values, e.g. bg-[var(--app-bg)]. Same palette as the main suite app. */
 :root,
@@ -46,6 +59,24 @@ body {
   --accent-border: rgba(168, 85, 247, 0.35);
   --brand-from: #c084fc;
   --brand-to: #818cf8;
+}
+
+[data-theme="blue"] {
+  --app-bg: #0a1930;
+  --card-bg: #112a52;
+  --card-border: #16305c;
+  --text-primary: #eaf2ff;
+  --text-secondary: #bcd4f5;
+  --text-muted: #7fa3d1;
+  --hover-bg: rgba(147, 197, 253, 0.1);
+  --input-border: #22406f;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.22);
+  --accent-text: #dbeafe;
+  --accent-border: rgba(59, 130, 246, 0.4);
+  --brand-from: #38bdf8;
+  --brand-to: #2563eb;
 }
 
 @keyframes voice-orbit {

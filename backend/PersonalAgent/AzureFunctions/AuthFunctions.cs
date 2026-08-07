@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,8 @@ namespace PersonalAgent.AzureFunctions;
 
 public sealed class AuthFunctions
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly IDbContextFactory<PersonalAgentDbContext> _dbFactory;
 
     public AuthFunctions(IDbContextFactory<PersonalAgentDbContext> dbFactory)
@@ -71,7 +74,7 @@ public sealed class AuthFunctions
     {
         try
         {
-            var payload = await System.Text.Json.JsonSerializer.DeserializeAsync<AuthSubscribeRequest>(request.Body, cancellationToken: cancellationToken);
+            var payload = await System.Text.Json.JsonSerializer.DeserializeAsync<AuthSubscribeRequest>(request.Body, JsonOptions, cancellationToken);
             if (payload is null || string.IsNullOrWhiteSpace(payload.AzureObjectId) || string.IsNullOrWhiteSpace(payload.Email))
             {
                 return await FunctionResponseFactory.ErrorResponseAsync(request, "Datos inválidos", HttpStatusCode.BadRequest);
@@ -166,7 +169,7 @@ public sealed class AuthFunctions
             return await FunctionResponseFactory.ErrorResponseAsync(request, "No autenticado", HttpStatusCode.Unauthorized);
         }
 
-        var payload = await System.Text.Json.JsonSerializer.DeserializeAsync<ProfileSaveRequest>(request.Body, cancellationToken: cancellationToken);
+        var payload = await System.Text.Json.JsonSerializer.DeserializeAsync<ProfileSaveRequest>(request.Body, JsonOptions, cancellationToken);
         if (payload is null)
         {
             return await FunctionResponseFactory.ErrorResponseAsync(request, "Datos inválidos", HttpStatusCode.BadRequest);

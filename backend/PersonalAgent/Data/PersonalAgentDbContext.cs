@@ -26,6 +26,12 @@ public sealed class PersonalAgentDbContext : DbContext
 
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
 
+    public DbSet<FoodItem> FoodItems => Set<FoodItem>();
+
+    public DbSet<PersonalExercise> PersonalExercises => Set<PersonalExercise>();
+
+    public DbSet<PersonalFoodItem> PersonalFoodItems => Set<PersonalFoodItem>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Person>()
@@ -98,6 +104,14 @@ public sealed class PersonalAgentDbContext : DbContext
             .HasIndex(u => u.AzureObjectId)
             .IsUnique();
 
+        // Filtered unique index: SQL Server treats multiple NULLs as distinct by default
+        // for a plain unique index, which is exactly what we want here (the single legacy
+        // "Usuario" row has a null AzureObjectId; every real account gets a non-null,
+        // unique value so its health data stays isolated from every other account).
+        modelBuilder.Entity<Person>()
+            .HasIndex(p => p.AzureObjectId)
+            .IsUnique();
+
         modelBuilder.Entity<AppUser>()
             .HasIndex(u => u.Email)
             .IsUnique();
@@ -116,5 +130,51 @@ public sealed class PersonalAgentDbContext : DbContext
             .Property(m => m.MealType)
             .HasConversion<string>()
             .HasMaxLength(20);
+
+        modelBuilder.Entity<MealLog>()
+            .HasOne(m => m.FoodItem)
+            .WithMany()
+            .HasForeignKey(m => m.FoodItemId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<FoodItem>()
+            .HasIndex(f => f.MatchKey)
+            .IsUnique();
+
+        modelBuilder.Entity<Person>()
+            .HasMany(p => p.PersonalExercises)
+            .WithOne(pe => pe.Person)
+            .HasForeignKey(pe => pe.PersonId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PersonalExercise>()
+            .HasIndex(pe => new { pe.PersonId, pe.NormalizedName })
+            .IsUnique();
+
+        modelBuilder.Entity<ExerciseLog>()
+            .HasOne(e => e.PersonalExercise)
+            .WithMany()
+            .HasForeignKey(e => e.PersonalExerciseId)
+            // ClientSetNull (not SetNull) avoids a "multiple cascade paths" SQL Server error,
+            // since Person already cascade-deletes ExerciseLogs directly.
+            .OnDelete(DeleteBehavior.ClientSetNull);
+
+        modelBuilder.Entity<Person>()
+            .HasMany(p => p.PersonalFoodItems)
+            .WithOne(pf => pf.Person)
+            .HasForeignKey(pf => pf.PersonId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PersonalFoodItem>()
+            .HasIndex(pf => new { pf.PersonId, pf.NormalizedName })
+            .IsUnique();
+
+        modelBuilder.Entity<MealLog>()
+            .HasOne(m => m.PersonalFoodItem)
+            .WithMany()
+            .HasForeignKey(m => m.PersonalFoodItemId)
+            // ClientSetNull (not SetNull) avoids a "multiple cascade paths" SQL Server error,
+            // since Person already cascade-deletes MealLogs directly.
+            .OnDelete(DeleteBehavior.ClientSetNull);
     }
 }

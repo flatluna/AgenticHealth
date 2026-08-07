@@ -99,24 +99,39 @@ public sealed class AdvisorAgent
 
     public bool IsConfigured => _chatClient is not null;
 
-    public async Task<string> AskAsync(string prompt, string? userName = null, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string prompt, string? azureObjectId, string? userName = null, CancellationToken cancellationToken = default)
     {
         if (_chatClient is null)
         {
             throw new InvalidOperationException("AdvisorAgent is not configured (missing Azure OpenAI settings).");
         }
 
+        // Each tool is wrapped in a lambda that captures azureObjectId (this request's caller
+        // identity) instead of passing the method group directly - AIFunctionFactory only
+        // exposes the LAMBDA's own parameters to the model, so the captured identity never
+        // leaks into the tool's JSON schema/args while still scoping every DB query below to
+        // the correct authenticated user's own Person row.
         IList<AITool> tools =
         [
-            AIFunctionFactory.Create(GetMealHistoryAsync, "get_meal_history",
+            AIFunctionFactory.Create(
+                (string? fromDateIso, string? toDateIso, CancellationToken ct) => GetMealHistoryAsync(azureObjectId, fromDateIso, toDateIso, ct),
+                "get_meal_history",
                 "Devuelve las comidas registradas por el usuario en un rango de fechas (JSON), con tipo, descripción, calorías y macros."),
-            AIFunctionFactory.Create(GetExerciseHistoryAsync, "get_exercise_history",
+            AIFunctionFactory.Create(
+                (string? fromDateIso, string? toDateIso, CancellationToken ct) => GetExerciseHistoryAsync(azureObjectId, fromDateIso, toDateIso, ct),
+                "get_exercise_history",
                 "Devuelve los ejercicios registrados por el usuario en un rango de fechas (JSON), con tipo, duración y calorías quemadas."),
-            AIFunctionFactory.Create(GetWeightHistoryAsync, "get_weight_history",
+            AIFunctionFactory.Create(
+                (string? fromDateIso, string? toDateIso, CancellationToken ct) => GetWeightHistoryAsync(azureObjectId, fromDateIso, toDateIso, ct),
+                "get_weight_history",
                 "Devuelve el historial de peso del usuario en un rango de fechas (JSON)."),
-            AIFunctionFactory.Create(GetGoalsSummaryAsync, "get_goals_summary",
+            AIFunctionFactory.Create(
+                (CancellationToken ct) => GetGoalsSummaryAsync(azureObjectId, ct),
+                "get_goals_summary",
                 "Devuelve las metas activas del usuario y su último plan de objetivos generado (peso objetivo, calorías diarias, etc.) en JSON."),
-            AIFunctionFactory.Create(GetProfileSummaryAsync, "get_profile_summary",
+            AIFunctionFactory.Create(
+                (CancellationToken ct) => GetProfileSummaryAsync(azureObjectId, ct),
+                "get_profile_summary",
                 "Devuelve datos guardados del perfil del usuario (estatura y nivel de actividad) en JSON."),
         ];
 
@@ -130,14 +145,14 @@ public sealed class AdvisorAgent
         return response.Text;
     }
 
-    private async Task<string> GetProfileSummaryAsync(CancellationToken cancellationToken)
+    private async Task<string> GetProfileSummaryAsync(string? azureObjectId, CancellationToken cancellationToken)
     {
         if (_dbContextFactory is null || _personProvider is null)
         {
             return "La base de datos no está configurada.";
         }
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var person = await db.People
@@ -149,6 +164,7 @@ public sealed class AdvisorAgent
     }
 
     private async Task<string> GetMealHistoryAsync(
+        string? azureObjectId,
         [Description("Fecha/hora inicial ISO 8601 del rango (inclusive). Si se omite, usa hace 30 días.")] string? fromDateIso,
         [Description("Fecha/hora final ISO 8601 del rango (inclusive). Si se omite, usa ahora.")] string? toDateIso,
         CancellationToken cancellationToken)
@@ -160,7 +176,7 @@ public sealed class AdvisorAgent
 
         var (fromUtc, toUtc) = ResolveRange(fromDateIso, toDateIso, defaultDays: 30);
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var meals = await db.MealLogs
@@ -200,6 +216,7 @@ public sealed class AdvisorAgent
     }
 
     private async Task<string> GetExerciseHistoryAsync(
+        string? azureObjectId,
         [Description("Fecha/hora inicial ISO 8601 del rango (inclusive). Si se omite, usa hace 30 días.")] string? fromDateIso,
         [Description("Fecha/hora final ISO 8601 del rango (inclusive). Si se omite, usa ahora.")] string? toDateIso,
         CancellationToken cancellationToken)
@@ -211,7 +228,7 @@ public sealed class AdvisorAgent
 
         var (fromUtc, toUtc) = ResolveRange(fromDateIso, toDateIso, defaultDays: 30);
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var exercises = await db.ExerciseLogs
@@ -237,6 +254,7 @@ public sealed class AdvisorAgent
     }
 
     private async Task<string> GetWeightHistoryAsync(
+        string? azureObjectId,
         [Description("Fecha/hora inicial ISO 8601 del rango (inclusive). Si se omite, usa hace 90 días.")] string? fromDateIso,
         [Description("Fecha/hora final ISO 8601 del rango (inclusive). Si se omite, usa ahora.")] string? toDateIso,
         CancellationToken cancellationToken)
@@ -248,7 +266,7 @@ public sealed class AdvisorAgent
 
         var (fromUtc, toUtc) = ResolveRange(fromDateIso, toDateIso, defaultDays: 90);
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var entries = await db.WeightLogs
@@ -267,14 +285,14 @@ public sealed class AdvisorAgent
         }, JsonOptions);
     }
 
-    private async Task<string> GetGoalsSummaryAsync(CancellationToken cancellationToken)
+    private async Task<string> GetGoalsSummaryAsync(string? azureObjectId, CancellationToken cancellationToken)
     {
         if (_dbContextFactory is null || _personProvider is null)
         {
             return "La base de datos no está configurada.";
         }
 
-        var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(cancellationToken);
+        var personId = await _personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var activeGoals = await db.Goals

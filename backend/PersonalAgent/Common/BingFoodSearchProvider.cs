@@ -1,6 +1,7 @@
 using Azure.AI.Agents.Persistent;
 using Azure.Identity;
 using Microsoft.Extensions.Configuration;
+using System.Linq;
 
 namespace PersonalAgent.Common;
 
@@ -22,14 +23,20 @@ namespace PersonalAgent.Common;
 public sealed class BingFoodSearchProvider
 {
     private const string AgentInstructions = """
-        Eres un asistente experto en nutrición. Cuando te pregunten por un alimento, usa la
-        herramienta de búsqueda de Bing para encontrar su información nutricional real y
-        actualizada (por ejemplo de bases de datos nutricionales, fabricantes o fuentes
-        confiables), en vez de inventar los valores.
+        Eres un asistente experto en nutrición. Cuando te pregunten por uno o varios
+        alimentos, usa la herramienta de búsqueda de Bing para encontrar su información
+        nutricional real y actualizada (por ejemplo de bases de datos nutricionales,
+        fabricantes o fuentes confiables), en vez de inventar los valores. Si el alimento es
+        de una marca o cadena específica (ej. "Big Mac de McDonald's", "Whopper de Burger
+        King"), prioriza el sitio oficial de esa marca/cadena sobre fuentes genéricas. Si te
+        piden varios alimentos en el mismo mensaje, busca cada uno por separado (puedes y
+        debes hacer varias búsquedas de Bing en esa misma respuesta) para no mezclar datos
+        de un alimento con otro.
 
-        Responde ÚNICAMENTE con un objeto JSON (sin texto adicional, sin markdown, sin
-        ```json) con esta forma exacta, usando null si un dato no se encuentra:
+        Cada objeto de resultado tiene esta forma exacta, usando null si un dato no se
+        encuentra:
         {
+          "query": string,
           "servingSize": string|null,
           "calories": number|null,
           "proteinGrams": number|null,
@@ -43,10 +50,28 @@ public sealed class BingFoodSearchProvider
           "calciumMilligrams": number|null,
           "ironMilligrams": number|null,
           "magnesiumMilligrams": number|null,
-          "vitaminAMicrograms": number|null
+          "vitaminAMicrograms": number|null,
+          "source": string|null,
+          "sourceUrl": string|null
         }
-        Todos los valores numéricos son por la porción indicada en "servingSize".
+        "query" debe repetir EXACTAMENTE (verbatim) el texto del alimento tal como te lo
+        pidieron, para poder emparejar cada resultado con su pregunta. Todos los valores
+        numéricos son por la porción indicada en "servingSize". "source" es OBLIGATORIO
+        cuando encuentres datos: el nombre corto y legible del sitio u organización de donde
+        salió la información (ej. "Sitio oficial de McDonald's", "USDA FoodData Central",
+        "MyFitnessPal"), NUNCA solo "Bing" o "internet" - Bing es el buscador, no la fuente.
+        "sourceUrl" es la URL exacta de la página consultada, o null si no puedes
+        determinarla con certeza. Si de verdad no encontraste ningún resultado para un
+        alimento, deja "source" y "sourceUrl" en null junto con los demás campos (pero
+        conserva su "query").
+
+        Si te preguntan por UN SOLO alimento, responde ÚNICAMENTE con ESE objeto (sin
+        arreglo envolvente, sin texto adicional, sin markdown, sin ```json). Si te preguntan
+        por VARIOS alimentos a la vez (una lista numerada), responde ÚNICAMENTE con un
+        arreglo JSON de esos mismos objetos, en el mismo orden en que te los pidieron, uno
+        por alimento - sin texto adicional, sin markdown.
         """;
+
 
     private readonly PersistentAgentsClient? _client;
     private readonly string? _modelDeploymentName;
@@ -75,10 +100,30 @@ public sealed class BingFoodSearchProvider
 
     /// <summary>
     /// Runs a Bing-grounded search for the given food description and returns the raw JSON
-    /// text produced by the model (per <see cref="AgentInstructions"/>), or null if this
-    /// provider isn't configured or the search failed.
+    /// object text produced by the model (per <see cref="AgentInstructions"/>), or null if
+    /// this provider isn't configured or the search failed.
     /// </summary>
-    public async Task<string?> SearchFoodNutritionJsonAsync(string foodDescription, CancellationToken cancellationToken)
+    public Task<string?> SearchFoodNutritionJsonAsync(string foodDescription, CancellationToken cancellationToken) =>
+        RunNutritionQueryAsync($"Información nutricional de: {foodDescription}", cancellationToken);
+
+    /// <summary>
+    /// Same as <see cref="SearchFoodNutritionJsonAsync"/> but looks up MULTIPLE foods in a
+    /// single Bing agent thread/run instead of one per food - halves the thread/run overhead
+    /// (each is a multi-second round trip on its own) for meals with several ingredients.
+    /// Returns the raw JSON ARRAY text produced by the model (one element per food, in the
+    /// same order as <paramref name="foodDescriptions"/>, per <see cref="AgentInstructions"/>),
+    /// or null if this provider isn't configured or the search failed.
+    /// </summary>
+    public Task<string?> SearchFoodsNutritionJsonAsync(IReadOnlyList<string> foodDescriptions, CancellationToken cancellationToken)
+    {
+        var numberedList = string.Join("\n", foodDescriptions.Select((food, index) => $"{index + 1}. {food}"));
+        return RunNutritionQueryAsync(
+            $"Información nutricional de los siguientes {foodDescriptions.Count} alimentos (responde con un " +
+            $"arreglo JSON, uno por cada uno, en el mismo orden):\n{numberedList}",
+            cancellationToken);
+    }
+
+    private async Task<string?> RunNutritionQueryAsync(string userMessage, CancellationToken cancellationToken)
     {
         if (_client is null)
         {
@@ -91,7 +136,7 @@ public sealed class BingFoodSearchProvider
         try
         {
             await _client.Messages.CreateMessageAsync(
-                thread.Id, MessageRole.User, $"Información nutricional de: {foodDescription}", cancellationToken: cancellationToken);
+                thread.Id, MessageRole.User, userMessage, cancellationToken: cancellationToken);
 
             ThreadRun run = await _client.Runs.CreateRunAsync(thread.Id, agent.Id, cancellationToken: cancellationToken);
 
@@ -127,7 +172,21 @@ public sealed class BingFoodSearchProvider
         }
         finally
         {
-            await _client.Threads.DeleteThreadAsync(thread.Id, cancellationToken);
+            // Fire-and-forget: deleting the thread is pure cleanup and doesn't need to block the
+            // response - shaves a full round trip off every search. CancellationToken.None so it
+            // still runs even if the caller's request has already finished/disconnected.
+            var threadId = thread.Id;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _client.Threads.DeleteThreadAsync(threadId, CancellationToken.None);
+                }
+                catch
+                {
+                    // Best-effort cleanup only.
+                }
+            });
         }
     }
 
