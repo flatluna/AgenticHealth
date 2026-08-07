@@ -43,9 +43,10 @@ export function FoodLabelReviewSheet({
     setIsSaving(true);
     setSaveError(null);
     try {
+      const finalName = (name && name.trim()) || (extraction.name && extraction.name.trim()) || 'Unnamed Food';
       await saveFoodLabelMeal({
         mealType,
-        name: name.trim() || extraction.name,
+        name: finalName,
         brand: extraction.brand,
         servingSize: extraction.servingSize,
         calories: extraction.calories,

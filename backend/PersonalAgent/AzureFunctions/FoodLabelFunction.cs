@@ -150,13 +150,22 @@ public sealed class FoodLabelFunction
 
         try
         {
+            var azureObjectIdHeader = request.Headers.TryGetValues("x-msal-user", out var values) ? values.FirstOrDefault() : null;
+            _logger.LogInformation("FoodLabelSave: Received request | x-msal-user header={header} | MealType={mealType} | Name={name}", 
+                string.IsNullOrWhiteSpace(azureObjectIdHeader) ? "[MISSING]" : azureObjectIdHeader, 
+                body.MealType, 
+                body.Name);
+
             var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
+            _logger.LogInformation("FoodLabelSave: PersonId={personId} resolved successfully", personId);
 
             await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            _logger.LogInformation("FoodLabelSave: DbContext created successfully");
 
             var foodItem = await db.FoodItems.FirstOrDefaultAsync(f => f.MatchKey == matchKey, cancellationToken);
             if (foodItem is null)
             {
+                _logger.LogInformation("FoodLabelSave: Creating new FoodItem for matchKey={matchKey}", matchKey);
                 foodItem = new FoodItem
                 {
                     Name = body.Name.Trim(),
@@ -179,6 +188,10 @@ public sealed class FoodLabelFunction
                     MatchKey = matchKey,
                 };
                 db.FoodItems.Add(foodItem);
+            }
+            else
+            {
+                _logger.LogInformation("FoodLabelSave: Found existing FoodItem id={foodItemId} for matchKey={matchKey}", foodItem.Id, matchKey);
             }
 
             foodItem.TimesLogged++;
@@ -209,28 +222,39 @@ public sealed class FoodLabelFunction
                 FoodItem = foodItem,
             };
             db.MealLogs.Add(mealLog);
+            _logger.LogInformation("FoodLabelSave: MealLog created for PersonId={personId}, MealType={mealType}", personId, parsedMealType);
 
             await db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("FoodLabelSave: Database save completed. MealLogId={mealLogId}, FoodItemId={foodItemId}", mealLog.Id, foodItem.Id);
 
             return await FunctionResponseFactory.SuccessResponseAsync(request, new SaveFoodLabelResponse(mealLog.Id, foodItem.Id));
         }
+        catch (DbUpdateException dbEx)
+        {
+            _logger.LogError(dbEx, "FoodLabelSave FAILED - DbUpdateException: {message} | Inner: {inner} | StackTrace: {stackTrace}", 
+                dbEx.Message, dbEx.InnerException?.Message ?? "none", dbEx.StackTrace ?? "none");
+            return await FunctionResponseFactory.ErrorResponseAsync(
+                request, 
+                $"Error en base de datos: {dbEx.InnerException?.Message ?? dbEx.Message}", 
+                HttpStatusCode.InternalServerError);
+        }
+        catch (InvalidOperationException ioEx)
+        {
+            _logger.LogError(ioEx, "FoodLabelSave FAILED - InvalidOperationException: {message} | Inner: {inner} | StackTrace: {stackTrace}", 
+                ioEx.Message, ioEx.InnerException?.Message ?? "none", ioEx.StackTrace ?? "none");
+            return await FunctionResponseFactory.ErrorResponseAsync(
+                request,
+                $"Operación inválida: {ioEx.Message}",
+                HttpStatusCode.InternalServerError);
+        }
         catch (Exception ex)
         {
-            var message = ex.Message;
-            var innerMessage = ex.InnerException?.Message ?? string.Empty;
-            var stackTrace = ex.StackTrace ?? string.Empty;
-            
-            _logger.LogError(ex, "FoodLabelSave failed: {message}. Inner: {innerMessage}", message, innerMessage);
-            
-            // Return more specific error messages based on exception type
-            var errorMsg = ex switch
-            {
-                DbUpdateException => $"Error en la base de datos: {message}. Intenta de nuevo.",
-                InvalidOperationException => $"Operación inválida: {message}",
-                _ => "No se pudo guardar el alimento. Intenta de nuevo."
-            };
-            
-            return await FunctionResponseFactory.ErrorResponseAsync(request, errorMsg, HttpStatusCode.InternalServerError);
+            _logger.LogError(ex, "FoodLabelSave FAILED - Unexpected Exception ({exceptionType}): {message} | Inner: {inner} | StackTrace: {stackTrace}", 
+                ex.GetType().Name, ex.Message, ex.InnerException?.Message ?? "none", ex.StackTrace ?? "none");
+            return await FunctionResponseFactory.ErrorResponseAsync(
+                request, 
+                $"No se pudo guardar el alimento: {ex.GetType().Name}: {ex.Message}", 
+                HttpStatusCode.InternalServerError);
         }
     }
 }
