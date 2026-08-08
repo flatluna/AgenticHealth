@@ -8,6 +8,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>PersonalAgent</RootNamespace>
     <_FunctionsSkipCleanOutput>true</_FunctionsSkipCleanOutput>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
