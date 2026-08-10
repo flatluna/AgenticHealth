@@ -25,9 +25,22 @@ function LoadingScreen() {
 
 function LoginScreen() {
   const { login } = useAuth();
+  const now = new Date();
+  const dateTime = now.toLocaleDateString('es-MX', { 
+    year: 'numeric', 
+    month: '2-digit', 
+    day: '2-digit' 
+  }) + ' ' + now.toLocaleTimeString('es-MX', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    second: '2-digit'
+  });
 
   return (
     <div className="flex h-dvh flex-col items-center justify-center gap-6 bg-gradient-to-br from-purple-600 via-fuchsia-600 to-indigo-700 px-6 text-center text-white">
+      <div className="absolute top-4 left-4 text-white/70 text-sm">
+        {dateTime}
+      </div>
       <AgentIcon className="h-16 w-16" />
       <div>
         <h1 className="text-2xl font-bold">Mi Agente de Salud</h1>
