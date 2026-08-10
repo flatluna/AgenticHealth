@@ -2,12 +2,5 @@
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": ["/assets/*", "/*.{css,js,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2,ttf}"]
-  },
-  "routes": [
-    {
-      "route": "/api/*",
-      "redirect": "https://agentichealth-api.azurewebsites.net/api/*",
-      "allowCredentials": true
-    }
-  ]
+  }
 }
