@@ -21,10 +21,18 @@ export function AppHeader() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
   return (
-    <header className="flex items-center justify-between gap-1 sm:gap-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 sm:px-4 py-2">
-      <span className="text-xs sm:text-sm font-bold tracking-tight text-[var(--accent-text)] shrink-0">Engrams</span>
-      <div className="flex-1" />
-      <div className="text-[10px] sm:text-xs text-[var(--text-muted)]">
+    <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-1 sm:gap-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 sm:px-4 py-2">
+      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+        <span className="text-xs sm:text-sm font-bold tracking-tight text-[var(--accent-text)] shrink-0">Engrams</span>
+        <div className="sm:hidden text-[10px] text-[var(--text-muted)]">
+          <VersionInfo />
+        </div>
+      </div>
+      <div className="text-[10px] sm:text-xs text-[var(--text-muted)] w-full sm:w-auto order-3 sm:order-none">
+        {new Date().toLocaleString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      </div>
+      <div className="flex-1 hidden sm:block" />
+      <div className="text-[10px] sm:text-xs text-[var(--text-muted)] hidden sm:block">
         <VersionInfo />
       </div>
       <div className="flex items-center gap-1 sm:gap-2 justify-end">
