@@ -110,7 +110,8 @@ export async function getFoodItems(search?: string): Promise<FoodItem[]> {
     params: search ? { q: search } : undefined,
     timeout: 15000,
   });
-  return data;
+  // Ensure response is always an array, even if API returns something unexpected
+  return Array.isArray(data) ? data : [];
 }
 
 /** Logs an already-known global product as a meal for the current user, no re-scanning needed. */
@@ -151,7 +152,8 @@ export interface PersonalFoodItem {
  * chat's "Guardar en mi catálogo" button - unlike getFoodItems, this is per-person, not shared. */
 export async function getPersonalFoodItems(): Promise<PersonalFoodItem[]> {
   const { data } = await apiClient.get<PersonalFoodItem[]>('/foods/personal', { timeout: 15000 });
-  return data;
+  // Ensure response is always an array, even if API returns something unexpected
+  return Array.isArray(data) ? data : [];
 }
 
 /** Logs an existing entry from the user's personal catalog as a meal, no re-computation needed. */
