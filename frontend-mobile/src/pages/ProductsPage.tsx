@@ -25,6 +25,18 @@ const NUTRIENT_ROWS: Array<{ key: keyof FoodItem; label: string; unit: string }>
   { key: 'vitaminAMicrograms', label: 'Vitamina A', unit: 'µg' },
 ];
 
+/** Safely format a UTC date string with fallback to empty string if invalid */
+function formatDateSafe(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    if (!Number.isFinite(date.getTime())) return '';
+    return date.toLocaleDateString('es-MX');
+  } catch {
+    return '';
+  }
+}
+
 /** Read-only bottom sheet showing every nutrient stored for a product (opened via the "Ver"
  * button), with a shortcut to jump straight into the add-to-nutrition flow. */
 function ProductDetailSheet({
@@ -82,8 +94,7 @@ function ProductDetailSheet({
         )}
 
         <div className="mb-3 space-y-1 text-[11px] text-[var(--text-muted)]">
-          <p>Registrado {product.timesLogged} {product.timesLogged === 1 ? 'vez' : 'veces'}.</p>
-          <p>Añadido {new Date(product.createdAtUtc).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          <p>Registrado {product.timesLogged} {product.timesLogged === 1 ? 'vez' : 'veces'}.{formatDateSafe(product.createdAtUtc) && ` Añadido ${new Date(product.createdAtUtc).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}`}</p>
         </div>
 
         <button
@@ -275,8 +286,7 @@ function PersonalFoodDetailSheet({
         </div>
 
         <div className="mb-3 space-y-1 text-[11px] text-[var(--text-muted)]">
-          <p>Guardado {item.timesLogged} {item.timesLogged === 1 ? 'vez' : 'veces'}.</p>
-          <p>Añadido {new Date(item.createdAtUtc).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          <p>Guardado {item.timesLogged} {item.timesLogged === 1 ? 'vez' : 'veces'}.{formatDateSafe(item.createdAtUtc) && ` Añadido ${new Date(item.createdAtUtc).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}`}</p>
         </div>
 
         <button
@@ -415,7 +425,7 @@ function PersonalFoodRow({ item, onView, onAdd }: { item: PersonalFoodItem; onVi
             {item.timesLogged > 0 ? ` · ${item.timesLogged}x` : ''}
           </p>
           <p className="truncate text-[9px] sm:text-[10px] text-[var(--text-muted)]">
-            Añadido {new Date(item.createdAtUtc).toLocaleDateString()}
+            {formatDateSafe(item.createdAtUtc) ? `Añadido ${formatDateSafe(item.createdAtUtc)}` : 'Fecha no disponible'}
           </p>
         </div>
       </div>
@@ -467,7 +477,7 @@ function ProductRow({
             {product.timesLogged > 0 ? ` · ${product.timesLogged}x` : ''}
           </p>
           <p className="truncate text-[9px] sm:text-[10px] text-[var(--text-muted)]">
-            Añadido {new Date(product.createdAtUtc).toLocaleDateString()}
+            {formatDateSafe(product.createdAtUtc) ? `Añadido ${formatDateSafe(product.createdAtUtc)}` : 'Fecha no disponible'}
           </p>
         </div>
       </div>
