@@ -53,6 +53,22 @@ export async function askAgent(message: string, sessionId: string | null, userNa
   return data;
 }
 
+/**
+ * Searches for food nutrition by a specific source (catalog, edamam, or internet).
+ * Called when user clicks one of the 3 search mode buttons.
+ */
+export async function searchFoodBySource(
+  message: string,
+  source: 'catalog' | 'global' | 'edamam' | 'internet',
+): Promise<AskResponse> {
+  const { data } = await apiClient.post<AskResponse>(
+    '/foods/search-source-direct',
+    { message, source },
+    { timeout: 120000 },
+  );
+  return data;
+}
+
 interface AgentProgressResponse {
   messages: string[];
 }
@@ -82,6 +98,36 @@ export async function logPendingMealToday(meal: PendingMeal): Promise<{ confirma
 export async function savePendingMealToCatalog(meal: PendingMeal): Promise<{ id: number }> {
   const { data } = await apiClient.post<{ id: number }>(
     '/foods/personal/save',
+    {
+      name: meal.description,
+      servingSize: meal.servingSize,
+      calories: meal.calories,
+      proteinGrams: meal.proteinGrams,
+      carbsGrams: meal.carbsGrams,
+      fatGrams: meal.fatGrams,
+      saturatedFatGrams: meal.saturatedFatGrams,
+      sugarGrams: meal.sugarGrams,
+      fiberGrams: meal.fiberGrams,
+      sodiumMilligrams: meal.sodiumMilligrams,
+      potassiumMilligrams: meal.potassiumMilligrams,
+      calciumMilligrams: meal.calciumMilligrams,
+      ironMilligrams: meal.ironMilligrams,
+      magnesiumMilligrams: meal.magnesiumMilligrams,
+      vitaminAMicrograms: meal.vitaminAMicrograms,
+    },
+    { timeout: 15000 },
+  );
+  return data;
+}
+
+/** Saves a PendingMeal as a product (global or local). */
+export async function savePendingMealAsProduct(
+  meal: PendingMeal,
+  scope: 'global' | 'local',
+): Promise<{ id: number }> {
+  const endpoint = scope === 'global' ? '/foods/items' : '/foods/personal/save';
+  const { data } = await apiClient.post<{ id: number }>(
+    endpoint,
     {
       name: meal.description,
       servingSize: meal.servingSize,

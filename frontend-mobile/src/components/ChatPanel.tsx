@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { Mic, LogOut, Camera, Loader2, Check, Plus, BookmarkPlus } from 'lucide-react';
-import { askAgent, getAgentProgress, logPendingMealToday, savePendingMealToCatalog, type PendingMeal } from '../api/agentApi';
+import { Mic, LogOut, Camera, Loader2, Check, Plus, Package, Search, Globe, BookOpen } from 'lucide-react';
+import { askAgent, getAgentProgress, logPendingMealToday, searchFoodBySource, savePendingMealAsProduct, type PendingMeal } from '../api/agentApi';
 import { extractFoodLabel, type FoodLabelExtractionResult } from '../api/foodLabelApi';
 import { FoodLabelReviewSheet } from './FoodLabelReviewSheet';
 import { PhotoSourceSheet } from './PhotoSourceSheet';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { SaveProductScopeModal } from './SaveProductScopeModal';
 import { AgentIcon } from './AgentIcon';
 import { useChatWidget } from '../contexts/ChatWidgetContext';
 import { useAuth } from '../contexts/AuthContext';
 
 const SESSION_STORAGE_KEY = 'personal-agent-mobile-session-id';
 
-type PendingMealAction = 'log' | 'save';
+type PendingMealAction = 'log' | 'product';
 
 export function ChatPanel() {
   const { messages, addMessage, isVoiceActive, setVoiceActive } = useChatWidget();
@@ -26,6 +27,10 @@ export function ChatPanel() {
   const [pendingMealActions, setPendingMealActions] = useState<
     Record<number, Partial<Record<PendingMealAction, 'loading' | 'done'>>>
   >({});
+  const [showProductScopeModal, setShowProductScopeModal] = useState(false);
+  const [mealToSaveAsProduct, setMealToSaveAsProduct] = useState<{ id: number; meal: PendingMeal } | null>(null);
+  // Stores the last user message so search buttons can use it when clicked (after input has been cleared)
+  const [lastUserMessage, setLastUserMessage] = useState('');
   // Persisted across page reloads (sessionStorage) so the agent keeps remembering the
   // conversation within the same browser tab session.
   const [sessionId, setSessionId] = useState<string | null>(() =>
@@ -75,6 +80,9 @@ export function ChatPanel() {
       return;
     }
 
+    // Store the last user message for the search buttons to use
+    setLastUserMessage(trimmed);
+
     addMessage('user', trimmed);
     setInput('');
     setIsLoading(true);
@@ -84,6 +92,7 @@ export function ChatPanel() {
     // Generate the sessionId up front (instead of waiting for askAgent's response) so we
     // can poll GET /agent/progress for this same session while the request is in flight.
     const activeSessionId = sessionId ?? crypto.randomUUID().replace(/-/g, '');
+    
     const progressInterval = window.setInterval(() => {
       void getAgentProgress(activeSessionId)
         .then((lines) => {
@@ -99,6 +108,51 @@ export function ChatPanel() {
 
     try {
       const { reply, sessionId: newSessionId, pendingMeal } = await askAgent(trimmed, activeSessionId, user?.displayName);
+      setSessionId(newSessionId);
+      sessionStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
+      addMessage('assistant', reply, pendingMeal);
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        'No se pudo contactar al agente. Verifica tu conexión.';
+      setError(message);
+    } finally {
+      window.clearInterval(progressInterval);
+      setIsLoading(false);
+      setProgressLines([]);
+    }
+  };
+
+  const handleSearchBySource = async (source: 'catalog' | 'global' | 'edamam' | 'internet') => {
+    // Use the last user message (stored when they sent it), or the current input if they haven't sent yet
+    const query = (lastUserMessage.trim() || input.trim());
+    if (!query || isLoading) {
+      return;
+    }
+
+    // Store this as the last message if it's from the current input
+    if (!lastUserMessage.trim() && input.trim()) {
+      setLastUserMessage(input.trim());
+    }
+
+    addMessage('user', query);
+    setInput('');
+    setIsLoading(true);
+    setError(null);
+    setProgressLines([]);
+
+    const progressInterval = window.setInterval(() => {
+      void getAgentProgress(sessionId ?? '')
+        .then((lines) => {
+          if (lines.length > 0) {
+            setProgressLines((prev) => [...prev, ...lines]);
+          }
+        })
+        .catch(() => {});
+    }, 1200);
+
+    try {
+      const { reply, sessionId: newSessionId, pendingMeal } = await searchFoodBySource(query, source);
       setSessionId(newSessionId);
       sessionStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
       addMessage('assistant', reply, pendingMeal);
@@ -130,15 +184,65 @@ export function ChatPanel() {
     }
   };
 
-  const handleSavePendingMealToCatalog = async (messageId: number, meal: PendingMeal) => {
-    setMealActionState(messageId, 'save', 'loading');
+  const handleSaveProductClick = (messageId: number, meal: PendingMeal) => {
+    setMealToSaveAsProduct({ id: messageId, meal });
+    setShowProductScopeModal(true);
+  };
+
+  const handleSaveProduct = async (scopes: ('global' | 'local')[]) => {
+    if (!mealToSaveAsProduct) return;
+    const { id: messageId, meal } = mealToSaveAsProduct;
+    setMealActionState(messageId, 'product', 'loading');
+    
+    const results: { scope: 'global' | 'local'; success: boolean }[] = [];
+    
     try {
-      await savePendingMealToCatalog(meal);
-      addMessage('assistant', `Guardado en tu catálogo personal: "${meal.description}".`);
-      setMealActionState(messageId, 'save', 'done');
+      // Save to each selected scope in parallel
+      await Promise.all(
+        scopes.map(async (scope) => {
+          try {
+            await savePendingMealAsProduct(meal, scope);
+            results.push({ scope, success: true });
+          } catch {
+            results.push({ scope, success: false });
+          }
+        })
+      );
+
+      const successful = results.filter((r) => r.success);
+      const failed = results.filter((r) => !r.success);
+
+      if (successful.length === 2) {
+        // Both global and local saved successfully
+        addMessage(
+          'assistant',
+          `✓ Guardado en productos globales y tu catálogo personal: "${meal.description}".`
+        );
+        setMealActionState(messageId, 'product', 'done');
+      } else if (successful.length === 1) {
+        // Only one saved
+        const successScope = successful[0].scope;
+        const failedScope = failed[0].scope;
+        const successMsg = successScope === 'global' 
+          ? `Guardado en productos globales: "${meal.description}".`
+          : `Guardado en tu catálogo personal: "${meal.description}".`;
+        const failMsg = failedScope === 'global'
+          ? ` No pude guardarlo en productos globales.`
+          : ` No pude guardarlo en tu catálogo.`;
+        
+        addMessage('assistant', successMsg + failMsg);
+        setMealActionState(messageId, 'product', 'done');
+      } else {
+        // Both failed
+        addMessage('assistant', 'No pude guardar en ningún lugar. Intenta de nuevo.');
+        setMealActionState(messageId, 'product', undefined);
+      }
     } catch {
-      addMessage('assistant', 'No pude guardarlo en tu catálogo. Intenta de nuevo.');
-      setMealActionState(messageId, 'save', undefined);
+      addMessage('assistant', 'Error al guardar. Intenta de nuevo.');
+      setMealActionState(messageId, 'product', undefined);
+    } finally {
+      setShowProductScopeModal(false);
+      setMealToSaveAsProduct(null);
     }
   };
 
@@ -200,22 +304,22 @@ export function ChatPanel() {
                     ) : (
                       <Plus className="h-3.5 w-3.5" />
                     )}
-                    Presiona para sumarlo a tu consumo de hoy
+                    Agregar a mi consumo de hoy
                   </button>
                   <button
                     type="button"
-                    disabled={pendingMealActions[message.id]?.save !== undefined}
-                    onClick={() => void handleSavePendingMealToCatalog(message.id, message.pendingMeal!)}
+                    disabled={pendingMealActions[message.id]?.product !== undefined}
+                    onClick={() => handleSaveProductClick(message.id, message.pendingMeal!)}
                     className="flex items-center gap-1.5 rounded-full border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--hover-bg)] disabled:opacity-50"
                   >
-                    {pendingMealActions[message.id]?.save === 'loading' ? (
+                    {pendingMealActions[message.id]?.product === 'loading' ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : pendingMealActions[message.id]?.save === 'done' ? (
+                    ) : pendingMealActions[message.id]?.product === 'done' ? (
                       <Check className="h-3.5 w-3.5" />
                     ) : (
-                      <BookmarkPlus className="h-3.5 w-3.5" />
+                      <Package className="h-3.5 w-3.5" />
                     )}
-                    Presiona para guardarlo en tu catálogo
+                    Guardar como producto
                   </button>
                 </div>
               )}
@@ -292,6 +396,52 @@ export function ChatPanel() {
             Enviar
           </button>
         </div>
+
+        {/* Search mode selector buttons */}
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleSearchBySource('catalog')}
+            disabled={isLoading || (!lastUserMessage.trim() && !input.trim())}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+              isLoading
+                ? 'bg-blue-500 text-white'
+                : 'border border-[var(--card-border)] text-[var(--text-primary)] hover:bg-[var(--hover-bg)]'
+            }`}
+            title="Buscar solo en el catálogo local"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Catálogo
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSearchBySource('edamam')}
+            disabled={isLoading || (!lastUserMessage.trim() && !input.trim())}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+              isLoading
+                ? 'bg-green-500 text-white'
+                : 'border border-[var(--card-border)] text-[var(--text-primary)] hover:bg-[var(--hover-bg)]'
+            }`}
+            title="Buscar en Edamam"
+          >
+            <Search className="h-3.5 w-3.5" />
+            Edamam
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSearchBySource('internet')}
+            disabled={isLoading || (!lastUserMessage.trim() && !input.trim())}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+              isLoading
+                ? 'bg-purple-500 text-white'
+                : 'border border-[var(--card-border)] text-[var(--text-primary)] hover:bg-[var(--hover-bg)]'
+            }`}
+            title="Buscar en internet (Bing)"
+          >
+            <Globe className="h-3.5 w-3.5" />
+            Internet
+          </button>
+        </div>
       </form>
 
       {showPhotoSource && (
@@ -329,6 +479,17 @@ export function ChatPanel() {
           onSaved={() => {
             setPendingExtraction(null);
             addMessage('assistant', 'Listo, lo agregué a tu consumo de hoy. ¿Algo más?');
+          }}
+        />
+      )}
+
+      {showProductScopeModal && mealToSaveAsProduct && (
+        <SaveProductScopeModal
+          productName={mealToSaveAsProduct.meal.description}
+          onSave={(scopes) => void handleSaveProduct(scopes)}
+          onCancel={() => {
+            setShowProductScopeModal(false);
+            setMealToSaveAsProduct(null);
           }}
         />
       )}

@@ -35,21 +35,32 @@ public sealed class DietAgent
 {
     private const string Instructions = """
         Eres DietAgent, un asistente experto en nutrición, dietas y conteo de calorías.
-        Tu prioridad: buscar datos confiables y enseñar al usuario cómo usar las búsquedas.
+        Tu prioridad: buscar datos confiables, RÁPIDO, en el orden correcto.
 
-        CÓMO FUNCIONA LA BÚSQUEDA (ENSEÑA ESTO AL USUARIO):
-        1) Por defecto busco en Edamam (rápido, <1 segundo) - bueno para alimentos comunes
-        2) Si usuario dice "búscalo en INTERNET/BING" → busco en Bing (lento, 5-15 segundos, pero más exhaustivo)
-        3) Si usuario dice "SOLO CATÁLOGO" → solo nuestro catálogo local, sin búsquedas externas
-        4) Si usuario NO especifica → intento Edamam primero
+        ⚡ ORDEN DE BÚSQUEDA POR DEFECTO:
+        1️⃣ SIEMPRE intenta search_food_catalog PRIMERO (instantáneo, ya confirmado por usuario)
+        2️⃣ Si no encuentra → search_foods_edamam (rápido, <1s, API estructurada)
+        3️⃣ Si aún no tiene datos → search_foods_bing (web exhaustiva, 5-15s, último recurso)
+
+        🚨 EXCEPCIÓN OBLIGATORIA, SIN EXCUSAS: Si el usuario pide EXPLÍCITAMENTE buscar "en internet",
+        "en la web", "en Bing", o dice algo como "búscalo"/"consulta"/"busca en" refiriéndose a la web,
+        IGNORA por completo el orden de arriba: ve DIRECTO a search_foods_bing, SIN llamar antes a
+        search_food_catalog ni a search_foods_edamam, incluso si ya tienes esos datos en el catálogo o
+        ya respondiste esa misma pregunta antes con el catálogo. Tu respuesta DEBE citar esa fuente web
+        específica (nunca "según nuestro catálogo" en este caso) - el usuario pidió una búsqueda nueva
+        en internet y espera un resultado de internet, no el dato ya conocido.
+
+        REGLA CRÍTICA (fuera de esa excepción): No saltees directamente a Bing. El catálogo local y
+        Edamam son casi siempre más rápidos. Solo usa Bing si el usuario lo pide explícitamente (ver
+        excepción arriba) O si las dos anteriores no retornan datos válidos.
 
         CUANDO BUSQUES:
-        - Siempre cita la fuente: "Según Edamam", "Según el sitio oficial de [marca]", etc.
+        - Siempre cita la fuente: "Según nuestro catálogo", "Según Edamam", "Según [marca oficial]", etc.
         - Valida datos con sentido común: ¿calorías razonables? ¿macros lógicos? ¿porción realista?
         - Si los datos parecen mal, dile al usuario: "Esto no me parece correcto. ¿Quieres que busque en internet?"
 
         FLUJO PARA REGISTRAR COMIDAS (cuando dice "comí..."):
-        1) Busca datos en orden: catálogo local → Edamam → (solo si usuario lo pide) Bing
+        1) Busca datos EN ORDEN: catálogo → Edamam → Bing (solo si pide/falla lo anterior)
         2) Valida con sentido común
         3) Llama a "propose_meal_for_confirmation" y pregunta si registra
         4) SOLO después que confirme en siguiente mensaje, llama "log_meal"
@@ -57,12 +68,11 @@ public sealed class DietAgent
         DATOS A BUSCAR: calorías, proteína, carbos, grasa, grasa saturada, fibra, azúcares,
         sodio, potasio, calcio, hierro, magnesio, vitamina A.
 
-        IMPORTANTE: Si usuario pregunta "¿cómo busca?", explícale el sistema anterior.
-          por separado - eso solo ralentiza. Para "search_foods_edamam", usa formato conciso en inglés
-          "<cantidad><unidad> <alimento>" (ej. "200g cooked white rice", no "una plate grande de arroz").
-          DESPUÉS de obtener los resultados de cada componente, valida que sean razonables usando tu
-          sentido común - si uno se ve desproporcionado o no tiene lógica, busca solo ese componente
-          de nuevo con otra herramienta para validar con una segunda fuente.
+        FORMATO PARA EDAMAM (search_foods_edamam):
+        - Usa formato CONCISO en inglés: "<cantidad><unidad> <alimento>" 
+        - CORRECTO: "200g cooked white rice", "1 large apple", "2 fried eggs"
+        - INCORRECTO: "una plate grande de arroz", "manzana grande que comiste"
+        - Cuando el usuario mencione un alimento en español, tradúcelo a esa forma concisa en inglés
         
         - Al llamar a "log_meal", SIEMPRE incluye "sourceBreakdown": desglose legible por ingrediente
           y su fuente específica (ej. "Pan: 80 kcal (Catálogo Propio); Mantequilla: 40 kcal (Edamam)").
@@ -89,6 +99,7 @@ public sealed class DietAgent
     private readonly EdamamFoodSearchProvider _edamamFoodSearchProvider;
     private readonly AgentProgressTracker _progressTracker;
     private readonly PendingMealTracker _pendingMealTracker;
+    private readonly FoodSourceChoiceTracker _foodSourceChoiceTracker;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<DietAgent> _logger;
     private readonly SemaphoreSlim _mcpToolsInitLock = new(1, 1);
@@ -102,6 +113,7 @@ public sealed class DietAgent
         EdamamFoodSearchProvider edamamFoodSearchProvider,
         AgentProgressTracker progressTracker,
         PendingMealTracker pendingMealTracker,
+        FoodSourceChoiceTracker foodSourceChoiceTracker,
         IServiceProvider serviceProvider,
         ILogger<DietAgent> logger)
     {
@@ -110,6 +122,7 @@ public sealed class DietAgent
         _edamamFoodSearchProvider = edamamFoodSearchProvider;
         _progressTracker = progressTracker;
         _pendingMealTracker = pendingMealTracker;
+        _foodSourceChoiceTracker = foodSourceChoiceTracker;
         _serviceProvider = serviceProvider;
         _logger = logger;
 
@@ -332,7 +345,35 @@ public sealed class DietAgent
             return null;
         }
 
-        FoodClassifyResult? classify;
+        var classify = await ClassifyFoodQueryAsync(prompt, cancellationToken);
+        if (classify is null || !classify.IsFoodQuery || classify.Foods is null || classify.Foods.Length == 0)
+        {
+            return null;
+        }
+
+        // Instead of auto-picking a lookup source (old behavior), always let the user choose -
+        // stash the extracted food list and reply with a short prompt; the frontend renders 4
+        // buttons ("Local"/"Global"/"Edamam"/"Internet") that call SearchBySpecificSourceAsync
+        // below with this exact same choice once clicked.
+        var originalFoods = classify.OriginalFoods is { Length: > 0 } ? classify.OriginalFoods : classify.Foods;
+        _foodSourceChoiceTracker.Set(sessionId, new FoodSourceChoiceDto(
+            classify.Foods,
+            originalFoods,
+            classify.MealType ?? "snack",
+            classify.AlreadyConsumed,
+            prompt));
+
+        var foodList = string.Join(", ", originalFoods);
+        return $"¿De dónde quieres que busque la información nutricional de \"{foodList}\"? " +
+            "Elige una opción abajo: catálogo, Edamam o internet.";
+    }
+
+    /// <summary>Small, tool-less LLM call shared by TryFastFoodLookupAsync (chat "Enviar" flow)
+    /// and SearchByPromptAndSourceAsync (permanent Local/Global/Edamam/Internet buttons flow) -
+    /// classifies whether the message mentions concrete food(s) and extracts them. Returns null
+    /// on any classification failure (caller decides what "not handled" means for its flow).</summary>
+    private async Task<FoodClassifyResult?> ClassifyFoodQueryAsync(string prompt, CancellationToken cancellationToken)
+    {
         try
         {
             var classifyResponse = await _chatClient!.CompleteChatAsync(
@@ -355,112 +396,223 @@ public sealed class DietAgent
                 ],
                 new ChatCompletionOptions { ResponseFormat = OpenAI.Chat.ChatResponseFormat.CreateJsonObjectFormat() },
                 cancellationToken);
-            classify = JsonSerializer.Deserialize<FoodClassifyResult>(classifyResponse.Value.Content[0].Text, FastPathJsonOptions);
+            return JsonSerializer.Deserialize<FoodClassifyResult>(classifyResponse.Value.Content[0].Text, FastPathJsonOptions);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return null;
         }
+    }
 
-        if (classify is null || !classify.IsFoodQuery || classify.Foods is null || classify.Foods.Length == 0)
+    /// <summary>Backs the 4 permanent "Local"/"Global"/"Edamam"/"Internet" buttons shown next to
+    /// the chat input: takes the raw text the user typed PLUS the source they explicitly picked
+    /// (instead of "Enviar") in one call - classifies/extracts the food(s) from the text, then
+    /// runs the search on ONLY that source, skipping the "¿de dónde busco?" round trip entirely
+    /// since the user already answered that by which button they pressed.</summary>
+    public async Task<(string Reply, PendingMealDto? PendingMeal)> SearchByPromptAndSourceAsync(
+        string prompt, string source, string? azureObjectId, CancellationToken cancellationToken)
+    {
+        if (_chatClient is null)
         {
-            return null;
+            throw new InvalidOperationException("DietAgent is not configured (missing Azure OpenAI settings).");
         }
 
-        var dbFactory = _serviceProvider.GetService<IDbContextFactory<PersonalAgentDbContext>>();
-        int? personId = null;
-        if (dbFactory is not null)
+        var classify = await ClassifyFoodQueryAsync(prompt, cancellationToken);
+        if (classify is null || !classify.IsFoodQuery || classify.Foods is null || classify.Foods.Length == 0)
         {
-            var personProvider = _serviceProvider.GetService<DefaultPersonProvider>();
-            if (personProvider is not null)
-            {
-                personId = await personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
-            }
+            return ("No pude identificar un alimento concreto en tu mensaje. ¿Puedes describirlo de otra forma?", null);
+        }
+
+        var originalFoods = classify.OriginalFoods is { Length: > 0 } ? classify.OriginalFoods : classify.Foods;
+        var choice = new FoodSourceChoiceDto(classify.Foods, originalFoods, classify.MealType ?? "snack", classify.AlreadyConsumed, prompt);
+        return await SearchBySpecificSourceAsync(choice, source, azureObjectId, cancellationToken);
+    }
+
+    /// <summary>Runs the lookup for exactly ONE source the user chose from the 3-button chooser
+    /// TryFastFoodLookupAsync offers, then composes the reply + a PendingMeal the same way the
+    /// old auto-picking fast path used to - shared by the text chat's POST /api/foods/search-source
+    /// endpoint. Returns a short "not found" reply (no PendingMeal) if that specific source had
+    /// nothing, instead of falling back to another source automatically - the user picked this
+    /// one on purpose and can just click a different button to try another.</summary>
+    public async Task<(string Reply, PendingMealDto? PendingMeal)> SearchBySpecificSourceAsync(
+        FoodSourceChoiceDto choice, string source, string? azureObjectId, CancellationToken cancellationToken)
+    {
+        if (_chatClient is null)
+        {
+            throw new InvalidOperationException("DietAgent is not configured (missing Azure OpenAI settings).");
         }
 
         var nutritionItems = new JsonArray();
-        var unmatched = new List<string>();
-        for (var i = 0; i < classify.Foods.Length; i++)
+        var sourceLabel = source switch
         {
-            var food = classify.Foods[i];
-            // Catalog entries are saved in whatever language the user said them in (ej.
-            // "sopa de arroz con mole"), while 'food' here is the English translation Edamam
-            // needs - so catalog lookups must use the ORIGINAL phrase instead, falling back to
-            // the English one if the classify step didn't return a matching originalFoods entry.
-            var catalogQuery = classify.OriginalFoods is not null && i < classify.OriginalFoods.Length && !string.IsNullOrWhiteSpace(classify.OriginalFoods[i])
-                ? classify.OriginalFoods[i]
-                : food;
+            "catalog" => "tu catálogo (personal y global)",
+            "local" => "tu catálogo personal",
+            "global" => "nuestro catálogo global",
+            "edamam" => "Edamam",
+            "internet" => "internet",
+            _ => source,
+        };
+        // Tracks whether EVERY matched item came from this user's own personal catalog, so we
+        // can skip offering to save it there again - it's already saved.
+        var allFromPersonalCatalog = source == "local";
 
-            // Personal catalog (this user's own previously-saved items) first, since it's an
-            // exact match to something they already confirmed before - then our shared
-            // label-scanned catalog, then Edamam as the last resort.
-            var personalMatch = dbFactory is null || personId is null
-                ? null
-                : await TryGetPersonalCatalogNutritionAsync(dbFactory, personId.Value, catalogQuery, cancellationToken);
-            var catalogMatch = personalMatch ?? (dbFactory is null ? null : await TryGetCatalogNutritionAsync(dbFactory, catalogQuery, cancellationToken));
-            if (catalogMatch is not null)
-            {
-                nutritionItems.Add(catalogMatch);
-            }
-            else
-            {
-                unmatched.Add(food);
-            }
-        }
-
-        if (unmatched.Count > 0)
+        switch (source)
         {
-            var edamamJson = await _edamamFoodSearchProvider.SearchFoodsNutritionJsonAsync(unmatched, cancellationToken);
-            if (edamamJson is not null && JsonNode.Parse(edamamJson) is JsonArray edamamArray)
+            // Combined "Catálogo" button: personal (already-confirmed by this user) takes
+            // priority per food, falling back to the shared global catalog for that same food.
+            case "catalog":
             {
-                var length = Math.Min(edamamArray.Count, unmatched.Count);
-                for (var i = 0; i < length; i++)
+                var dbFactory = _serviceProvider.GetService<IDbContextFactory<PersonalAgentDbContext>>();
+                var personProvider = _serviceProvider.GetService<DefaultPersonProvider>();
+                int? personId = dbFactory is null || personProvider is null
+                    ? null
+                    : await personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
+
+                allFromPersonalCatalog = true;
+                for (var i = 0; i < choice.Queries.Length; i++)
                 {
-                    if (edamamArray[i] is JsonObject obj && obj.ContainsKey("calories"))
+                    var catalogQuery = i < choice.OriginalQueries.Length && !string.IsNullOrWhiteSpace(choice.OriginalQueries[i])
+                        ? choice.OriginalQueries[i]
+                        : choice.Queries[i];
+                    var personalMatch = dbFactory is null || personId is null
+                        ? null
+                        : await TryGetPersonalCatalogNutritionAsync(dbFactory, personId.Value, catalogQuery, cancellationToken);
+                    var catalogMatch = personalMatch ?? (dbFactory is null ? null : await TryGetCatalogNutritionAsync(dbFactory, catalogQuery, cancellationToken));
+                    if (catalogMatch is not null)
                     {
-                        nutritionItems.Add(obj.DeepClone());
-                        _ = CacheBingResultAsync(unmatched[i], obj.ToJsonString(), CancellationToken.None);
+                        nutritionItems.Add(catalogMatch);
+                        if (personalMatch is null)
+                        {
+                            allFromPersonalCatalog = false;
+                        }
                     }
                 }
+                break;
             }
+            case "local":
+            {
+                var dbFactory = _serviceProvider.GetService<IDbContextFactory<PersonalAgentDbContext>>();
+                var personProvider = _serviceProvider.GetService<DefaultPersonProvider>();
+                int? personId = dbFactory is null || personProvider is null
+                    ? null
+                    : await personProvider.GetOrCreatePersonIdForUserAsync(azureObjectId, cancellationToken);
+
+                for (var i = 0; i < choice.Queries.Length; i++)
+                {
+                    var catalogQuery = i < choice.OriginalQueries.Length && !string.IsNullOrWhiteSpace(choice.OriginalQueries[i])
+                        ? choice.OriginalQueries[i]
+                        : choice.Queries[i];
+                    var personalMatch = dbFactory is null || personId is null
+                        ? null
+                        : await TryGetPersonalCatalogNutritionAsync(dbFactory, personId.Value, catalogQuery, cancellationToken);
+                    if (personalMatch is not null)
+                    {
+                        nutritionItems.Add(personalMatch);
+                    }
+                }
+                break;
+            }
+            case "global":
+            {
+                var dbFactory = _serviceProvider.GetService<IDbContextFactory<PersonalAgentDbContext>>();
+                for (var i = 0; i < choice.Queries.Length; i++)
+                {
+                    var catalogQuery = i < choice.OriginalQueries.Length && !string.IsNullOrWhiteSpace(choice.OriginalQueries[i])
+                        ? choice.OriginalQueries[i]
+                        : choice.Queries[i];
+                    var catalogMatch = dbFactory is null ? null : await TryGetCatalogNutritionAsync(dbFactory, catalogQuery, cancellationToken);
+                    if (catalogMatch is not null)
+                    {
+                        nutritionItems.Add(catalogMatch);
+                    }
+                }
+                break;
+            }
+            case "edamam":
+            {
+                if (!_edamamFoodSearchProvider.IsConfigured)
+                {
+                    return ("Edamam no está configurado en este momento.", null);
+                }
+
+                var edamamJson = await _edamamFoodSearchProvider.SearchFoodsNutritionJsonAsync(choice.Queries, cancellationToken);
+                if (edamamJson is not null && JsonNode.Parse(edamamJson) is JsonArray edamamArray)
+                {
+                    foreach (var node in edamamArray)
+                    {
+                        if (node is JsonObject obj && obj.ContainsKey("calories"))
+                        {
+                            nutritionItems.Add(obj.DeepClone());
+                        }
+                    }
+                }
+                break;
+            }
+            case "internet":
+            {
+                if (!_bingFoodSearchProvider.IsConfigured)
+                {
+                    return ("La búsqueda en internet no está configurada en este momento.", null);
+                }
+
+                var bingJson = choice.Queries.Length == 1
+                    ? await _bingFoodSearchProvider.SearchFoodNutritionJsonAsync(choice.Queries[0], cancellationToken)
+                    : await _bingFoodSearchProvider.SearchFoodsNutritionJsonAsync(choice.Queries, cancellationToken);
+                if (bingJson is not null && JsonNode.Parse(bingJson) is { } bingParsed)
+                {
+                    if (bingParsed is JsonArray bingArray)
+                    {
+                        foreach (var node in bingArray)
+                        {
+                            if (node is JsonObject obj && obj.ContainsKey("calories"))
+                            {
+                                nutritionItems.Add(obj.DeepClone());
+                            }
+                        }
+                    }
+                    else if (bingParsed is JsonObject singleObj && singleObj.ContainsKey("calories"))
+                    {
+                        nutritionItems.Add(singleObj.DeepClone());
+                    }
+                }
+                break;
+            }
+            default:
+                return ("Fuente de búsqueda desconocida.", null);
         }
 
         if (nutritionItems.Count == 0)
         {
-            // Neither the catalog nor Edamam recognized any of the foods - fall back to the
-            // full agent so its search_foods_bing/search_food last-resort tools get a try.
-            return null;
+            return ($"No encontré resultados en {sourceLabel} para \"{string.Join(", ", choice.OriginalQueries)}\". " +
+                "¿Quieres intentar con otra fuente?", null);
         }
 
         ComposeMealResult? composed;
-        try {
+        try
+        {
             var nowLocal = TimeZoneInfo.ConvertTime(DateTime.UtcNow, MealTimeHelper.Central);
             var composeResponse = await _chatClient!.CompleteChatAsync(
                 [
                     new SystemChatMessage(
                         "Con estos datos nutricionales en JSON (uno por alimento, cada uno con su 'source'), " +
                         "calcula los TOTALES sumando todos los alimentos y redacta una respuesta breve en " +
-                        "español (campo 'replyText') citando la(s) fuente(s) por alimento (ej. 'Según Edamam " +
-                        "Food Database...'; si un alimento vino de 'source' null o de nuestro catálogo, dilo " +
-                        "explícitamente). Si 'alreadyConsumed' es true, usa tono de pasado y SIEMPRE pregunta " +
-                        "explícitamente si quiere agregarlo a su registro de hoy (ej. '¿Quieres que lo agregue " +
-                        "a tu consumo de hoy?'); si es false, responde la pregunta informativa y de todas " +
-                        "formas pregunta si quiere agregarlo. Responde SOLO con JSON: {\"replyText\": string, " +
-                        "\"mealType\": \"breakfast\"|\"lunch\"|\"dinner\"|\"snack\", \"description\": string " +
-                        "(breve, ej. 'salmón a la plancha y banana'), \"servingSize\": string|null, " +
-                        "\"calories\": number|null, \"proteinGrams\": number|null, \"carbsGrams\": number|null, " +
-                        "\"fatGrams\": number|null, \"saturatedFatGrams\": number|null, \"sugarGrams\": " +
-                        "number|null, \"fiberGrams\": number|null, \"sodiumMilligrams\": number|null, " +
-                        "\"potassiumMilligrams\": number|null, \"calciumMilligrams\": number|null, " +
-                        "\"ironMilligrams\": number|null, \"magnesiumMilligrams\": number|null, " +
-                        "\"vitaminAMicrograms\": number|null, \"sourceBreakdown\": string (desglose legible " +
-                        "por alimento y su fuente específica, ej. 'Salmón: 313 kcal (Edamam Food Database); " +
-                        "Banana: 102 kcal (Edamam Food Database)')} - todos los totales son la SUMA de todos " +
-                        "los alimentos en los datos."),
+                        "español (campo 'replyText') citando la fuente específica de cada alimento. Si " +
+                        "'alreadyConsumed' es true, usa tono de pasado y SIEMPRE pregunta explícitamente si " +
+                        "quiere agregarlo a su registro de hoy; si es false, responde la pregunta informativa " +
+                        "y de todas formas pregunta si quiere agregarlo. Responde SOLO con JSON: " +
+                        "{\"replyText\": string, \"mealType\": \"breakfast\"|\"lunch\"|\"dinner\"|\"snack\", " +
+                        "\"description\": string, \"servingSize\": string|null, \"calories\": number|null, " +
+                        "\"proteinGrams\": number|null, \"carbsGrams\": number|null, \"fatGrams\": number|null, " +
+                        "\"saturatedFatGrams\": number|null, \"sugarGrams\": number|null, \"fiberGrams\": " +
+                        "number|null, \"sodiumMilligrams\": number|null, \"potassiumMilligrams\": number|null, " +
+                        "\"calciumMilligrams\": number|null, \"ironMilligrams\": number|null, " +
+                        "\"magnesiumMilligrams\": number|null, \"vitaminAMicrograms\": number|null, " +
+                        "\"sourceBreakdown\": string} - todos los totales son la SUMA de todos los alimentos."),
                     new UserChatMessage(
                         $"[Fecha y hora actual: {nowLocal:yyyy-MM-dd HH:mm} ({nowLocal:dddd})]\n" +
-                        $"[alreadyConsumed: {classify.AlreadyConsumed}]\n[mealType sugerido: {classify.MealType ?? "snack"}]\n\n" +
-                        $"Pregunta original del usuario: {prompt}\n\nDatos nutricionales JSON: {nutritionItems.ToJsonString()}"),
+                        $"[alreadyConsumed: {choice.AlreadyConsumed}]\n[mealType sugerido: {choice.MealType}]\n" +
+                        $"[Fuente elegida por el usuario: {sourceLabel}]\n\n" +
+                        $"Pregunta original del usuario: {choice.OriginalPrompt}\n\nDatos nutricionales JSON: {nutritionItems.ToJsonString()}"),
                 ],
                 new ChatCompletionOptions { ResponseFormat = OpenAI.Chat.ChatResponseFormat.CreateJsonObjectFormat() },
                 cancellationToken);
@@ -468,20 +620,17 @@ public sealed class DietAgent
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return null;
+            return ("Encontré datos pero no pude redactar la respuesta. Intenta de nuevo.", null);
         }
 
         if (composed is null || string.IsNullOrWhiteSpace(composed.ReplyText))
         {
-            return null;
+            return ("Encontré datos pero no pude redactar la respuesta. Intenta de nuevo.", null);
         }
 
-        // Deterministic "insert" step - equivalent to the full agent's
-        // propose_meal_for_confirmation tool, but just parsing step 3's own structured output
-        // instead of a separate tool-call round-trip.
-        _pendingMealTracker.Set(sessionId, new PendingMealDto(
-            composed.MealType ?? classify.MealType ?? "snack",
-            composed.Description ?? classify.Foods[0],
+        var pendingMeal = new PendingMealDto(
+            composed.MealType ?? choice.MealType,
+            composed.Description ?? (choice.OriginalQueries.Length > 0 ? choice.OriginalQueries[0] : choice.Queries[0]),
             composed.ServingSize,
             composed.Calories,
             composed.ProteinGrams,
@@ -497,9 +646,10 @@ public sealed class DietAgent
             composed.MagnesiumMilligrams,
             composed.VitaminAMicrograms,
             ConsumedAtIso: null,
-            composed.SourceBreakdown));
+            composed.SourceBreakdown,
+            AlreadyInPersonalCatalog: allFromPersonalCatalog && nutritionItems.Count > 0);
 
-        return composed.ReplyText;
+        return (composed.ReplyText, pendingMeal);
     }
 
     /// <summary>Best-effort single best match from THIS person's own saved catalog (see

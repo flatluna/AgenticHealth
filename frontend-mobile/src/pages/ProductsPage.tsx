@@ -81,7 +81,10 @@ function ProductDetailSheet({
           </div>
         )}
 
-        <p className="mb-3 text-[11px] text-[var(--text-muted)]">Registrado {product.timesLogged} {product.timesLogged === 1 ? 'vez' : 'veces'}.</p>
+        <div className="mb-3 space-y-1 text-[11px] text-[var(--text-muted)]">
+          <p>Registrado {product.timesLogged} {product.timesLogged === 1 ? 'vez' : 'veces'}.</p>
+          <p>Añadido {new Date(product.createdAtUtc).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
 
         <button
           type="button"
@@ -271,7 +274,10 @@ function PersonalFoodDetailSheet({
           ))}
         </div>
 
-        <p className="mb-3 text-[11px] text-[var(--text-muted)]">Guardado {item.timesLogged} {item.timesLogged === 1 ? 'vez' : 'veces'}.</p>
+        <div className="mb-3 space-y-1 text-[11px] text-[var(--text-muted)]">
+          <p>Guardado {item.timesLogged} {item.timesLogged === 1 ? 'vez' : 'veces'}.</p>
+          <p>Añadido {new Date(item.createdAtUtc).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
 
         <button
           type="button"
@@ -408,6 +414,9 @@ function PersonalFoodRow({ item, onView, onAdd }: { item: PersonalFoodItem; onVi
             {item.servingSize ? ` · ${item.servingSize}` : ''}
             {item.timesLogged > 0 ? ` · ${item.timesLogged}x` : ''}
           </p>
+          <p className="truncate text-[9px] sm:text-[10px] text-[var(--text-muted)]">
+            Añadido {new Date(item.createdAtUtc).toLocaleDateString()}
+          </p>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
@@ -456,6 +465,9 @@ function ProductRow({
             {product.calories != null ? `${Math.round(product.calories)} kcal` : 'Sin calorías'}
             {product.servingSize ? ` · ${product.servingSize}` : ''}
             {product.timesLogged > 0 ? ` · ${product.timesLogged}x` : ''}
+          </p>
+          <p className="truncate text-[9px] sm:text-[10px] text-[var(--text-muted)]">
+            Añadido {new Date(product.createdAtUtc).toLocaleDateString()}
           </p>
         </div>
       </div>

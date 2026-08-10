@@ -59,7 +59,8 @@ public sealed class FoodItemsFunction
         double? MagnesiumMilligrams,
         double? VitaminAMicrograms,
         string? IngredientsText,
-        int TimesLogged);
+        int TimesLogged,
+        DateTime CreatedAtUtc);
 
     /// <summary>GET /api/foods/items?q= - lists products from the global food database
     /// (optionally filtered by name/brand), most-logged first, for the "Productos" page.</summary>
@@ -112,7 +113,8 @@ public sealed class FoodItemsFunction
                     f.MagnesiumMilligrams,
                     f.VitaminAMicrograms,
                     f.IngredientsText,
-                    f.TimesLogged))
+                    f.TimesLogged,
+                    f.CreatedAtUtc))
                 .ToListAsync(cancellationToken);
 
             return await FunctionResponseFactory.SuccessResponseAsync(request, items);
@@ -301,7 +303,8 @@ public sealed class FoodItemsFunction
         double? IronMilligrams,
         double? MagnesiumMilligrams,
         double? VitaminAMicrograms,
-        int TimesLogged);
+        int TimesLogged,
+        DateTime CreatedAtUtc);
 
     /// <summary>GET /api/foods/personal - lists THIS person's own saved catalog entries
     /// (Data/PersonalFoodItem.cs), most-saved/logged first - backs a "Mi catálogo" view so the
@@ -345,7 +348,8 @@ public sealed class FoodItemsFunction
                     pf.IronMilligrams,
                     pf.MagnesiumMilligrams,
                     pf.VitaminAMicrograms,
-                    pf.TimesLogged))
+                    pf.TimesLogged,
+                    pf.CreatedAtUtc))
                 .ToListAsync(cancellationToken);
 
             return await FunctionResponseFactory.SuccessResponseAsync(request, items);
@@ -408,6 +412,104 @@ public sealed class FoodItemsFunction
         {
             _logger.LogError(ex, "PersonalFoodItemsLog failed");
             return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo registrar el alimento.", HttpStatusCode.InternalServerError);
+        }
+    }
+
+    public sealed record SaveGlobalFoodItemRequest(
+        string Name,
+        string? ServingSize,
+        double? Calories,
+        double? ProteinGrams,
+        double? CarbsGrams,
+        double? FatGrams,
+        double? SaturatedFatGrams,
+        double? SugarGrams,
+        double? FiberGrams,
+        double? SodiumMilligrams,
+        double? PotassiumMilligrams,
+        double? CalciumMilligrams,
+        double? IronMilligrams,
+        double? MagnesiumMilligrams,
+        double? VitaminAMicrograms);
+
+    public sealed record SaveGlobalFoodItemResponse(int Id);
+
+    /// <summary>POST /api/foods/items - saves a food product to the global SHARED FoodItem 
+    /// database so all users can benefit from it. Used by the chat's "Guardar en productos globales" 
+    /// button.</summary>
+    [Function("SaveGlobalFoodItem")]
+    public async Task<HttpResponseData> SaveGlobalAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "foods/items")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(
+                request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        SaveGlobalFoodItemRequest? body;
+        try
+        {
+            body = await request.ReadFromJsonAsync<SaveGlobalFoodItemRequest>(cancellationToken: cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Cuerpo JSON inválido.", HttpStatusCode.BadRequest);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Name))
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Falta el nombre del alimento.", HttpStatusCode.BadRequest);
+        }
+
+        try
+        {
+            await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            
+            // Normalize name+brand for deduplication (find-or-create pattern)
+            var matchKey = $"{body.Name}".ToLowerInvariant().Trim();
+            var existing = await db.FoodItems.FirstOrDefaultAsync(f => f.MatchKey == matchKey, cancellationToken);
+            
+            if (existing is not null)
+            {
+                // Already exists - just return its ID
+                return await FunctionResponseFactory.SuccessResponseAsync(request, new SaveGlobalFoodItemResponse(existing.Id));
+            }
+
+            // Create new global FoodItem
+            var foodItem = new FoodItem
+            {
+                Name = body.Name,
+                ServingSize = body.ServingSize,
+                Calories = body.Calories,
+                ProteinGrams = body.ProteinGrams,
+                CarbsGrams = body.CarbsGrams,
+                FatGrams = body.FatGrams,
+                SaturatedFatGrams = body.SaturatedFatGrams,
+                SugarGrams = body.SugarGrams,
+                FiberGrams = body.FiberGrams,
+                SodiumMilligrams = body.SodiumMilligrams,
+                PotassiumMilligrams = body.PotassiumMilligrams,
+                CalciumMilligrams = body.CalciumMilligrams,
+                IronMilligrams = body.IronMilligrams,
+                MagnesiumMilligrams = body.MagnesiumMilligrams,
+                VitaminAMicrograms = body.VitaminAMicrograms,
+                MatchKey = matchKey,
+                TimesLogged = 0,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            db.FoodItems.Add(foodItem);
+            await db.SaveChangesAsync(cancellationToken);
+
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new SaveGlobalFoodItemResponse(foodItem.Id));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SaveGlobalFoodItem failed");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo guardar en productos globales.", HttpStatusCode.InternalServerError);
         }
     }
 }

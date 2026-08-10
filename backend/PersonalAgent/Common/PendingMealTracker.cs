@@ -30,7 +30,9 @@ public sealed record PendingMealDto(
     /// <summary>Short, generic, LLM-generated name for saving into the personal catalog (ej. "Arroz con huevo frito") - distinct from Description, which can be more specific/verbose (ej. "150g de arroz y dos huevos fritos").</summary>
     string? CatalogName = null,
     /// <summary>Short, generic, LLM-generated description for the personal catalog (ej. "Plato de arroz blanco con huevos fritos en aceite de oliva").</summary>
-    string? CatalogDescription = null);
+    string? CatalogDescription = null,
+    /// <summary>True when every matched food already came from this user's own personal catalog - lets the frontend hide the redundant "guardar en tu catálogo" button since it's already saved there.</summary>
+    bool AlreadyInPersonalCatalog = false);
 
 /// <summary>
 /// In-memory, per-session single-slot holder for the last meal DietAgent proposed (via the

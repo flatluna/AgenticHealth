@@ -100,6 +100,7 @@ export interface FoodItem {
   vitaminAMicrograms: number | null;
   ingredientsText: string | null;
   timesLogged: number;
+  createdAtUtc: string;
 }
 
 /** Lists products from the global food database (created by any user via the label-scan
@@ -143,6 +144,7 @@ export interface PersonalFoodItem {
   magnesiumMilligrams: number | null;
   vitaminAMicrograms: number | null;
   timesLogged: number;
+  createdAtUtc: string;
 }
 
 /** Lists THIS user's own saved catalog entries (Data/PersonalFoodItem.cs), populated via the

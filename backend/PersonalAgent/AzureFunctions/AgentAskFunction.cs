@@ -13,23 +13,26 @@ public sealed class AgentAskFunction
     private readonly OrchestratorAgent _orchestrator;
     private readonly AgentProgressTracker _progressTracker;
     private readonly PendingMealTracker _pendingMealTracker;
+    private readonly FoodSourceChoiceTracker _foodSourceChoiceTracker;
     private readonly ILogger<AgentAskFunction> _logger;
 
     public AgentAskFunction(
         OrchestratorAgent orchestrator,
         AgentProgressTracker progressTracker,
         PendingMealTracker pendingMealTracker,
+        FoodSourceChoiceTracker foodSourceChoiceTracker,
         ILogger<AgentAskFunction> logger)
     {
         _orchestrator = orchestrator;
         _progressTracker = progressTracker;
         _pendingMealTracker = pendingMealTracker;
+        _foodSourceChoiceTracker = foodSourceChoiceTracker;
         _logger = logger;
     }
 
     public sealed record AskRequest(string Message, string? SessionId, string? UserName);
 
-    public sealed record AskResponse(string Reply, string SessionId, PendingMealDto? PendingMeal);
+    public sealed record AskResponse(string Reply, string SessionId, PendingMealDto? PendingMeal, FoodSourceChoiceDto? FoodSourceChoice);
 
     [Function("AgentAsk")]
     public async Task<HttpResponseData> RunAsync(
@@ -70,8 +73,11 @@ public sealed class AgentAskFunction
         {
             var azureObjectId = request.Headers.TryGetValues("x-msal-user", out var values) ? values.FirstOrDefault() : null;
             var reply = await _orchestrator.AskAsync(body.Message, sessionId, azureObjectId, body.UserName, cancellationToken);
+            // Fix literal \n escape sequences that the LLM model sometimes generates as two-char literals instead of actual newlines
+            var cleanReply = reply.Replace("\\n", "\n");
             var pendingMeal = _pendingMealTracker.Take(sessionId);
-            return await FunctionResponseFactory.SuccessResponseAsync(request, new AskResponse(reply, sessionId, pendingMeal));
+            var foodSourceChoice = _foodSourceChoiceTracker.Take(sessionId);
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new AskResponse(cleanReply, sessionId, pendingMeal, foodSourceChoice));
         }
         catch (Exception ex)
         {

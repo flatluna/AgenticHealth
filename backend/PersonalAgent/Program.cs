@@ -56,6 +56,10 @@ var host = new HostBuilder()
         // frontend can render "Agregar a comida de hoy"/"Guardar en mi catálogo" buttons.
         services.AddSingleton<PendingMealTracker>();
 
+        // Holds the last food-source choice ("Catálogo local"/"Edamam"/"Internet") DietAgent's
+        // fast path offered, so the frontend can render the 3 chooser buttons.
+        services.AddSingleton<FoodSourceChoiceTracker>();
+
         // Lightweight auth support for the landing page + profile flow.
         services.AddOptions<AuthenticationSettings>();
 
