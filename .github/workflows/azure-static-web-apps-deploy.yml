@@ -22,6 +22,12 @@ jobs:
 
       - name: Build frontend
         working-directory: ./frontend-mobile
+        # Static Web Apps Free SKU has no "linked backend" support, so relative /api/*
+        # calls fall through to the SPA fallback (index.html) instead of reaching the
+        # Function App. Point the build straight at the Function App's own URL instead -
+        # it already allows this origin via CORS (az functionapp cors).
+        env:
+          VITE_API_BASE_URL: https://agentichealth-api.azurewebsites.net/api
         run: |
           npm install
           npm run build

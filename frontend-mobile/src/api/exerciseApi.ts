@@ -26,7 +26,11 @@ export async function getExerciseHistory(days = 90): Promise<ExerciseHistory> {
     params: { days },
     timeout: 15000,
   });
-  return data;
+  // Guard against a malformed (e.g. non-JSON) response so callers never see an undefined array.
+  return {
+    entries: Array.isArray(data?.entries) ? data.entries : [],
+    totalMinutes: data?.totalMinutes ?? 0,
+  };
 }
 
 /** Logs a new exercise entry (defaults to now if no date given). */

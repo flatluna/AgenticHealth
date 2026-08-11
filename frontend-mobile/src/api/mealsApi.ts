@@ -45,6 +45,17 @@ export interface MealsResponse {
   totals: NutritionTotals;
 }
 
+const EMPTY_TOTALS: NutritionTotals = {
+  calories: 0,
+  proteinGrams: 0,
+  carbsGrams: 0,
+  fatGrams: 0,
+  sugarGrams: 0,
+  fiberGrams: 0,
+  sodiumMilligrams: 0,
+  potassiumMilligrams: 0,
+};
+
 /**
  * Fetches logged meals + aggregated nutritional totals for the given inclusive LOCAL
  * calendar date range. Converts local-day boundaries to precise UTC instants (instead of
@@ -58,7 +69,11 @@ export async function getMeals(from: Date, to: Date): Promise<MealsResponse> {
     params: { from: fromInstant, to: toExclusiveInstant },
     timeout: 30000,
   });
-  return data;
+  // Guard against a malformed (e.g. non-JSON) response so the page degrades instead of crashing.
+  return {
+    meals: Array.isArray(data?.meals) ? data.meals : [],
+    totals: data?.totals ?? EMPTY_TOTALS,
+  };
 }
 
 /** Deletes a logged meal by id. */
