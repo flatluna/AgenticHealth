@@ -124,16 +124,14 @@ export function ChatPanel() {
   };
 
   const handleSearchBySource = async (source: 'catalog' | 'global' | 'edamam' | 'internet') => {
-    // Use the last user message (stored when they sent it), or the current input if they haven't sent yet
-    const query = (lastUserMessage.trim() || input.trim());
+    // Behaves like pressing Enter with whatever's currently typed; only reuse the last sent
+    // message when the input is empty (e.g. re-running the same question against another source).
+    const query = (input.trim() || lastUserMessage.trim());
     if (!query || isLoading) {
       return;
     }
 
-    // Store this as the last message if it's from the current input
-    if (!lastUserMessage.trim() && input.trim()) {
-      setLastUserMessage(input.trim());
-    }
+    setLastUserMessage(query);
 
     addMessage('user', query);
     setInput('');
