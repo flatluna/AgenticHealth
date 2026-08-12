@@ -69,10 +69,31 @@ export interface GoalPlanCheckIn {
   notes: string | null;
 }
 
+const EMPTY_GOAL_PLAN: GoalPlan = {
+  summary: '',
+  bmi: 0,
+  bmiCategory: 'N/A',
+  targetWeightKg: null,
+  estimatedWeeksToGoal: null,
+  dailyCalorieTarget: null,
+  macros: { proteinGrams: null, carbsGrams: null, fatGrams: null },
+  nutritionPlan: { description: '', mealsPerDay: null, keyRecommendations: [] },
+  exercisePlan: { description: '', daysPerWeek: null, minutesPerSession: null, keyRecommendations: [] },
+  milestones: [],
+  tips: [],
+};
+
 /** Fetches the default person's stored profile snapshot (height/weight/activity), used to prefill the form. */
 export async function getGoalsProfile(): Promise<GoalsProfile> {
-  const { data } = await apiClient.get<GoalsProfile>('/goals/profile', { timeout: 15000 });
-  return data;
+  const { data } = await apiClient.get<unknown>('/goals/profile', { timeout: 15000 });
+  const payload = (data ?? {}) as Record<string, unknown>;
+
+  return {
+    heightCm: typeof payload.heightCm === 'number' ? payload.heightCm : null,
+    weightKg: typeof payload.weightKg === 'number' ? payload.weightKg : null,
+    activityLevel: typeof payload.activityLevel === 'string' ? (payload.activityLevel as ActivityLevel) : null,
+    age: typeof payload.age === 'number' ? payload.age : null,
+  };
 }
 
 /** Saves weight/height/activity level directly (no AI call) - lets the user persist a stat change without regenerating the whole plan. */
@@ -100,8 +121,13 @@ export async function createGoalPlan(request: {
 
 /** Fetches the most recently generated goal plan, if any, so the page can restore it on reload. */
 export async function getLatestGoalPlan(): Promise<GoalPlanResponse> {
-  const { data } = await apiClient.get<GoalPlanResponse>('/goals/plan/latest', { timeout: 15000 });
-  return data;
+  const { data } = await apiClient.get<unknown>('/goals/plan/latest', { timeout: 15000 });
+  const payload = (data ?? {}) as Record<string, unknown>;
+
+  return {
+    planId: typeof payload.planId === 'number' ? payload.planId : null,
+    plan: payload.plan && typeof payload.plan === 'object' ? (payload.plan as GoalPlan) : EMPTY_GOAL_PLAN,
+  };
 }
 
 /** Saves (creates or updates) today's - or a given day's - check-in against a plan: steps walked, whether nutrition/exercise were followed, and optional notes. */
@@ -122,9 +148,11 @@ export async function saveGoalPlanCheckIn(
 
 /** Fetches the check-in history (default last 14 days) for a plan, newest first. */
 export async function getGoalPlanCheckInHistory(planId: number, days = 14): Promise<GoalPlanCheckIn[]> {
-  const { data } = await apiClient.get<{ checkIns: GoalPlanCheckIn[] }>(`/goals/plan/${planId}/checkins`, {
+  const { data } = await apiClient.get<unknown>(`/goals/plan/${planId}/checkins`, {
     params: { days },
     timeout: 15000,
   });
-  return data.checkIns;
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  return Array.isArray(payload.checkIns) ? (payload.checkIns as GoalPlanCheckIn[]) : [];
 }
