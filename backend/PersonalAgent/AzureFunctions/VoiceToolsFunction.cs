@@ -158,7 +158,7 @@ public sealed class VoiceToolsFunction
             return await FunctionResponseFactory.ErrorResponseAsync(request, "Falta la descripción del alimento.", HttpStatusCode.BadRequest);
         }
 
-        if (!_edamamFoodSearchProvider.IsConfigured && !_bingFoodSearchProvider.IsConfigured)
+        if (!_bingFoodSearchProvider.IsConfigured)
         {
             return await FunctionResponseFactory.SuccessResponseAsync(request, new
             {
@@ -168,31 +168,11 @@ public sealed class VoiceToolsFunction
 
         try
         {
-            // Same priority/shape as DietAgent's text-chat flow: try Edamam's structured API
-            // first for ALL components in one call (fast, 1-3s), then fall back to Bing
-            // Grounding (slower) ONLY for the components Edamam couldn't resolve - never the
-            // whole compound description as one query, since Edamam's NLP parser expects
-            // concise single-food English phrases, not descriptive Spanish sentences (it
-            // silently mis-parses those into near-zero/garbage nutrition values).
+            // The intended flow is: catalog search first, then internet search only if needed.
+            // Edamam is intentionally no longer active in this path.
             var items = new JsonNode?[body.FoodDescriptions.Length];
+            var unmatchedIndexes = Enumerable.Range(0, items.Length).ToArray();
 
-            if (_edamamFoodSearchProvider.IsConfigured)
-            {
-                var edamamJson = await _edamamFoodSearchProvider.SearchFoodsNutritionJsonAsync(body.FoodDescriptions, cancellationToken);
-                if (edamamJson is not null && JsonNode.Parse(edamamJson) is JsonArray edamamArray)
-                {
-                    var length = Math.Min(edamamArray.Count, items.Length);
-                    for (var i = 0; i < length; i++)
-                    {
-                        if (edamamArray[i] is JsonObject obj && obj["calories"] is not null)
-                        {
-                            items[i] = obj.DeepClone();
-                        }
-                    }
-                }
-            }
-
-            var unmatchedIndexes = Enumerable.Range(0, items.Length).Where(i => items[i] is null).ToArray();
             if (unmatchedIndexes.Length > 0 && _bingFoodSearchProvider.IsConfigured)
             {
                 var unmatchedDescriptions = unmatchedIndexes.Select(i => body.FoodDescriptions[i]).ToArray();

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PersonalAgent.Data;
 
@@ -11,9 +12,11 @@ using PersonalAgent.Data;
 namespace PersonalAgent.Migrations
 {
     [DbContext(typeof(PersonalAgentDbContext))]
-    partial class PersonalAgentDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811231332_AddGlobalExerciseCatalog")]
+    partial class AddGlobalExerciseCatalog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -347,9 +350,6 @@ namespace PersonalAgent.Migrations
 
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
-
-                    b.Property<int?>("WaterMl")
-                        .HasColumnType("int");
 
                     b.HasKey("Id");
 

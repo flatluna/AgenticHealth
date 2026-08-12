@@ -22,6 +22,8 @@ public sealed class GoalPlanCheckIn
 
     public int? StepsWalked { get; set; }
 
+    public int? WaterMl { get; set; }
+
     public bool FollowedNutrition { get; set; }
 
     public bool FollowedExercise { get; set; }

@@ -39,20 +39,19 @@ public sealed class DietAgent
 
         ⚡ ORDEN DE BÚSQUEDA POR DEFECTO:
         1️⃣ SIEMPRE intenta search_food_catalog PRIMERO (instantáneo, ya confirmado por usuario)
-        2️⃣ Si no encuentra → search_foods_edamam (rápido, <1s, API estructurada)
-        3️⃣ Si aún no tiene datos → search_foods_bing (web exhaustiva, 5-15s, último recurso)
+        2️⃣ Si no encuentra nada útil → search_foods_bing (web exhaustiva, 5-15s, último recurso)
 
         🚨 EXCEPCIÓN OBLIGATORIA, SIN EXCUSAS: Si el usuario pide EXPLÍCITAMENTE buscar "en internet",
         "en la web", "en Bing", o dice algo como "búscalo"/"consulta"/"busca en" refiriéndose a la web,
         IGNORA por completo el orden de arriba: ve DIRECTO a search_foods_bing, SIN llamar antes a
-        search_food_catalog ni a search_foods_edamam, incluso si ya tienes esos datos en el catálogo o
-        ya respondiste esa misma pregunta antes con el catálogo. Tu respuesta DEBE citar esa fuente web
-        específica (nunca "según nuestro catálogo" en este caso) - el usuario pidió una búsqueda nueva
-        en internet y espera un resultado de internet, no el dato ya conocido.
+        search_food_catalog, incluso si ya tienes esos datos en el catálogo o ya respondiste esa misma
+        pregunta antes con el catálogo. Tu respuesta DEBE citar esa fuente web específica (nunca
+        "según nuestro catálogo" en este caso) - el usuario pidió una búsqueda nueva en internet y
+        espera un resultado de internet, no el dato ya conocido.
 
-        REGLA CRÍTICA (fuera de esa excepción): No saltees directamente a Bing. El catálogo local y
-        Edamam son casi siempre más rápidos. Solo usa Bing si el usuario lo pide explícitamente (ver
-        excepción arriba) O si las dos anteriores no retornan datos válidos.
+        REGLA CRÍTICA (fuera de esa excepción): No saltees directamente a Bing. El catálogo es la
+        primera opción y casi siempre el camino más rápido y confiable. Solo usa Bing si el usuario lo
+        pide explícitamente o si la búsqueda en catálogo no tiene datos válidos.
 
         CUANDO BUSQUES:
         - Siempre cita la fuente: "Según nuestro catálogo", "Según Edamam", "Según [marca oficial]", etc.
@@ -222,24 +221,6 @@ public sealed class DietAgent
             "para respuestas que no proponen una comida nueva.");
 
         IList<AITool> tools = [.. mcpTools, logMealTool, getRecentMealsTool, searchFoodCatalogTool, proposeMealTool];
-
-        if (_edamamFoodSearchProvider.IsConfigured)
-        {
-            // Direct structured nutrition API (single HTTP call, no LLM-agent thread/run cycle)
-            // - resolves in 1-3s, so this is preferred over search_foods_bing when available.
-            var edamamFoodsTool = AIFunctionFactory.Create(
-                async (
-                    [Description("Alimentos a buscar, uno por elemento, EN INGLÉS y en formato conciso \"<cantidad><unidad> <alimento>\" (ej. [\"200g cooked white rice\", \"2 large fried eggs\"]) - NUNCA frases descriptivas largas (ej. NO \"a large plate of rice\"), ya que confunden la búsqueda con platillos de nombre similar. Incluye TODOS los componentes de la comida en esta única llamada, incluso si es un solo alimento.")] string[] foodDescriptions,
-                    CancellationToken ct) => SearchFoodsEdamamAsync(foodDescriptions, sessionId, ct),
-                "search_foods_edamam",
-                "Busca en la API estructurada de nutrición de Edamam (rápida, sin búsqueda web) la información " +
-                "nutricional completa de uno o varios alimentos EN UNA SOLA LLAMADA: calorías, macros y " +
-                "micronutrientes comunes. Úsala cuando search_foods_dietly no está disponible o si los resultados " +
-                "no tienen datos completos - solo usa search_foods_bing si Edamam tampoco funciona. Devuelve un arreglo " +
-                "JSON en el mismo orden que 'foodDescriptions', cada elemento con un campo 'query' que repite " +
-                "el alimento buscado.");
-            tools = [.. tools, edamamFoodsTool];
-        }
 
         if (_bingFoodSearchProvider.IsConfigured)
         {

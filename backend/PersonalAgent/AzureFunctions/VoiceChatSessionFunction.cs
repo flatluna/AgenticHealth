@@ -31,8 +31,8 @@ public sealed class VoiceChatSessionFunction
         real con el usuario. Hablas español de forma natural, cálida y conversacional.
 
         CÓMO FUNCIONA LA BÚSQUEDA (ENSEÑA ESTO AL USUARIO):
-        1) Por defecto busco en nuestro catálogo primero, luego Edamam (rápido, <1 segundo)
-        2) Si usuario dice "búscalo en INTERNET" → busco en Bing (lento, 5-15 segundos, pero más exhaustivo)
+        1) Por defecto busco en nuestro catálogo primero
+        2) Si no hay coincidencia útil, busco en internet (Bing, 5-15 segundos, más exhaustivo)
         3) Si usuario dice "SOLO CATÁLOGO" → solo nuestro catálogo, sin búsquedas externas
 
         CUANDO REGISTRES UNA COMIDA (usuario dice "comí..."):
@@ -44,7 +44,7 @@ public sealed class VoiceChatSessionFunction
         - SOLO cuando el usuario confirme en el siguiente turno, llama "log_meal"
 
         CUANDO BUSQUES INFORMACIÓN (usuario pregunta "¿cuántas calorías tiene...?"):
-        - Intenta Edamam primero (es rápido)
+        - Intenta primero en el catálogo
         - Si usuario dice "búscalo en internet/Bing" → ve directo a Bing
         - Si usuario dice "solo catálogo" → solo catálogo
         - Si no encuentra nada y usuario no dijo nada → puedes preguntar "¿quieres que busque en internet?"
@@ -263,12 +263,12 @@ public sealed class VoiceChatSessionFunction
         {
             ["type"] = "function",
             ["name"] = "search_food_nutrition",
-            ["description"] = "Busca en la web la información nutricional completa de uno o varios alimentos EN " +
+            ["description"] = "Busca en internet la información nutricional completa de uno o varios alimentos EN " +
                 "UNA SOLA LLAMADA: calorías, macros (proteína, carbohidratos, grasa), micronutrientes comunes y " +
                 "la fuente exacta de donde salió el dato (campos 'source'/'sourceUrl', ej. 'Sitio oficial de " +
-                "McDonald's'). Interna y automáticamente usa primero Edamam (rápida, 1-3s) por CADA componente y " +
-                "solo si un componente falla cae a Bing (más lenta) para ese componente - no necesitas elegir " +
-                "cuál, solo llama a esta única herramienta. Devuelve un arreglo JSON en el mismo orden que " +
+                "McDonald's'). Sé que la prioridad correcta es catálogo primero y internet después, así que usa " +
+                "esta herramienta solo cuando ya intentaste 'search_personal_catalog' y/o 'search_food_catalog' y " +
+                "no encontraron una coincidencia útil. Devuelve un arreglo JSON en el mismo orden que " +
                 "'foodDescriptions', cada elemento con un campo 'query' que repite el alimento buscado - si la " +
                 "comida tiene varios componentes, SUMA tú mismo calorías/macros/micronutrientes de todos los " +
                 "elementos antes de reportar el total. Úsala SIEMPRE que el usuario pregunte por calorías/" +

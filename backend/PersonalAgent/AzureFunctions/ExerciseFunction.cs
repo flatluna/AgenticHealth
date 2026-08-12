@@ -243,6 +243,10 @@ public sealed class ExerciseFunction
 
     public sealed record PersonalExerciseDto(int Id, string Name, int DurationMinutes, double? CaloriesBurned, int TimesLogged);
 
+    public sealed record GlobalExerciseDto(int Id, string Name, int DefaultDurationMinutes, double? DefaultCaloriesBurned, string? Category, int TimesUsed, string? Description);
+
+    public sealed record UpdatePersonalExerciseRequest(string Name, int? DurationMinutes, double? CaloriesBurned);
+
     /// <summary>GET /api/exercise/catalog - lists THIS person's own saved custom exercises
     /// (Data/PersonalExercise.cs), most-logged first, so they can quickly re-log one without
     /// asking the AI to re-estimate it. Personal per-user, unlike the global FoodItems catalog.</summary>
@@ -282,6 +286,256 @@ public sealed class ExerciseFunction
     public sealed record LogCatalogExerciseRequest(int? DurationMinutes, string? RecordedAtIso);
 
     public sealed record LogCatalogExerciseResponse(int ExerciseLogId);
+
+    public sealed record UpdatePersonalExerciseResponse(int Id);
+
+    public sealed record SaveGlobalExerciseRequest(string Name, int? DefaultDurationMinutes, double? DefaultCaloriesBurned, string? Category, string? Description);
+
+    public sealed record SaveGlobalExerciseResponse(int Id);
+
+    public sealed record UpdateGlobalExerciseRequest(string Name, int? DefaultDurationMinutes, double? DefaultCaloriesBurned, string? Category, string? Description, bool? IsPublic);
+
+    [Function("ExerciseCatalogUpdate")]
+    public async Task<HttpResponseData> UpdatePersonalCatalogAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "exercise/catalog/{id:int}")]
+        HttpRequestData request,
+        int id,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null || _personProvider is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        UpdatePersonalExerciseRequest? body;
+        try
+        {
+            body = await request.ReadFromJsonAsync<UpdatePersonalExerciseRequest>(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Invalid ExerciseCatalogUpdate request body");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Cuerpo de la petición inválido.", HttpStatusCode.BadRequest);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Name))
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Se requiere un nombre válido.", HttpStatusCode.BadRequest);
+        }
+
+        try
+        {
+            var personId = await _personProvider.GetOrCreateDefaultPersonIdAsync(request, cancellationToken);
+            await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+            var item = await db.PersonalExercises.FirstOrDefaultAsync(pe => pe.Id == id && pe.PersonId == personId, cancellationToken);
+            if (item is null)
+            {
+                return await FunctionResponseFactory.ErrorResponseAsync(request, "Ejercicio no encontrado.", HttpStatusCode.NotFound);
+            }
+
+            item.Name = body.Name.Trim();
+            item.NormalizedName = body.Name.Trim().ToLowerInvariant();
+            item.DurationMinutes = body.DurationMinutes ?? item.DurationMinutes;
+            item.CaloriesBurned = body.CaloriesBurned ?? item.CaloriesBurned;
+
+            await db.SaveChangesAsync(cancellationToken);
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new UpdatePersonalExerciseResponse(item.Id));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ExerciseCatalogUpdate failed");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo actualizar el ejercicio.", HttpStatusCode.InternalServerError);
+        }
+    }
+
+    [Function("ExerciseGlobalList")]
+    public async Task<HttpResponseData> ListGlobalAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "exercise/global")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        try
+        {
+            await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var items = await db.GlobalExercises
+                .OrderByDescending(ge => ge.TimesUsed)
+                .ThenBy(ge => ge.Name)
+                .Select(ge => new GlobalExerciseDto(
+                    ge.Id,
+                    ge.Name,
+                    ge.DefaultDurationMinutes,
+                    ge.DefaultCaloriesBurned,
+                    ge.Category,
+                    ge.TimesUsed,
+                    ge.Description))
+                .ToListAsync(cancellationToken);
+
+            return await FunctionResponseFactory.SuccessResponseAsync(request, items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ExerciseGlobalList failed");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo cargar la biblioteca global de ejercicios.", HttpStatusCode.InternalServerError);
+        }
+    }
+
+    [Function("ExerciseGlobalSave")]
+    public async Task<HttpResponseData> SaveGlobalAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "exercise/global")]
+        HttpRequestData request,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        SaveGlobalExerciseRequest? body;
+        try
+        {
+            body = await request.ReadFromJsonAsync<SaveGlobalExerciseRequest>(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Invalid ExerciseGlobalSave request body");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Cuerpo de la petición inválido.", HttpStatusCode.BadRequest);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Name))
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Se requiere un nombre válido para el ejercicio.", HttpStatusCode.BadRequest);
+        }
+
+        try
+        {
+            await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var normalized = body.Name.Trim();
+            var existing = await db.GlobalExercises.FirstOrDefaultAsync(ge => ge.NormalizedName == normalized.ToLowerInvariant(), cancellationToken);
+
+            if (existing is not null)
+            {
+                existing.DefaultDurationMinutes = body.DefaultDurationMinutes ?? existing.DefaultDurationMinutes;
+                existing.DefaultCaloriesBurned = body.DefaultCaloriesBurned ?? existing.DefaultCaloriesBurned;
+                existing.Category = body.Category ?? existing.Category;
+                existing.Description = body.Description ?? existing.Description;
+                existing.IsPublic = true;
+                await db.SaveChangesAsync(cancellationToken);
+                return await FunctionResponseFactory.SuccessResponseAsync(request, new SaveGlobalExerciseResponse(existing.Id));
+            }
+
+            var item = new GlobalExercise
+            {
+                Name = normalized,
+                NormalizedName = normalized.ToLowerInvariant(),
+                DefaultDurationMinutes = body.DefaultDurationMinutes ?? 30,
+                DefaultCaloriesBurned = body.DefaultCaloriesBurned,
+                Category = body.Category,
+                Description = body.Description,
+                IsPublic = true,
+            };
+
+            db.GlobalExercises.Add(item);
+            await db.SaveChangesAsync(cancellationToken);
+
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new SaveGlobalExerciseResponse(item.Id), HttpStatusCode.Created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ExerciseGlobalSave failed");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo guardar el ejercicio global.", HttpStatusCode.InternalServerError);
+        }
+    }
+
+    [Function("ExerciseGlobalUpdate")]
+    public async Task<HttpResponseData> UpdateGlobalAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "exercise/global/{id:int}")]
+        HttpRequestData request,
+        int id,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        UpdateGlobalExerciseRequest? body;
+        try
+        {
+            body = await request.ReadFromJsonAsync<UpdateGlobalExerciseRequest>(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Invalid ExerciseGlobalUpdate request body");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Cuerpo de la petición inválido.", HttpStatusCode.BadRequest);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Name))
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "Se requiere un nombre válido para el ejercicio.", HttpStatusCode.BadRequest);
+        }
+
+        try
+        {
+            await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var item = await db.GlobalExercises.FirstOrDefaultAsync(ge => ge.Id == id, cancellationToken);
+            if (item is null)
+            {
+                return await FunctionResponseFactory.ErrorResponseAsync(request, "Ejercicio global no encontrado.", HttpStatusCode.NotFound);
+            }
+
+            item.Name = body.Name.Trim();
+            item.NormalizedName = body.Name.Trim().ToLowerInvariant();
+            item.DefaultDurationMinutes = body.DefaultDurationMinutes ?? item.DefaultDurationMinutes;
+            item.DefaultCaloriesBurned = body.DefaultCaloriesBurned ?? item.DefaultCaloriesBurned;
+            item.Category = body.Category ?? item.Category;
+            item.Description = body.Description ?? item.Description;
+            item.IsPublic = body.IsPublic ?? item.IsPublic;
+
+            await db.SaveChangesAsync(cancellationToken);
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new { updated = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ExerciseGlobalUpdate failed");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo actualizar el ejercicio global.", HttpStatusCode.InternalServerError);
+        }
+    }
+
+    [Function("ExerciseGlobalDelete")]
+    public async Task<HttpResponseData> DeleteGlobalAsync(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "exercise/global/{id:int}")]
+        HttpRequestData request,
+        int id,
+        CancellationToken cancellationToken)
+    {
+        if (_dbContextFactory is null)
+        {
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "La base de datos no está configurada.", HttpStatusCode.ServiceUnavailable);
+        }
+
+        try
+        {
+            await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var deletedRows = await db.GlobalExercises.Where(ge => ge.Id == id).ExecuteDeleteAsync(cancellationToken);
+            if (deletedRows == 0)
+            {
+                return await FunctionResponseFactory.ErrorResponseAsync(request, "Ejercicio global no encontrado.", HttpStatusCode.NotFound);
+            }
+
+            return await FunctionResponseFactory.SuccessResponseAsync(request, new { deleted = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ExerciseGlobalDelete failed");
+            return await FunctionResponseFactory.ErrorResponseAsync(request, "No se pudo eliminar el ejercicio global.", HttpStatusCode.InternalServerError);
+        }
+    }
 
     /// <summary>POST /api/exercise/catalog/{id}/log - logs an existing entry from THIS
     /// person's own catalog again (optionally with a different duration, scaling calories

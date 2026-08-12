@@ -30,6 +30,8 @@ public sealed class PersonalAgentDbContext : DbContext
 
     public DbSet<PersonalExercise> PersonalExercises => Set<PersonalExercise>();
 
+    public DbSet<GlobalExercise> GlobalExercises => Set<GlobalExercise>();
+
     public DbSet<PersonalFoodItem> PersonalFoodItems => Set<PersonalFoodItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -149,6 +151,10 @@ public sealed class PersonalAgentDbContext : DbContext
 
         modelBuilder.Entity<PersonalExercise>()
             .HasIndex(pe => new { pe.PersonId, pe.NormalizedName })
+            .IsUnique();
+
+        modelBuilder.Entity<GlobalExercise>()
+            .HasIndex(ge => ge.NormalizedName)
             .IsUnique();
 
         modelBuilder.Entity<ExerciseLog>()

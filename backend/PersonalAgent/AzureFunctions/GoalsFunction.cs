@@ -283,6 +283,7 @@ public sealed class GoalsFunction
     public sealed record GoalPlanCheckInRequest(
         string? CheckInDate,
         int? StepsWalked,
+        int? WaterMl,
         bool FollowedNutrition,
         bool FollowedExercise,
         string? Notes);
@@ -291,6 +292,7 @@ public sealed class GoalsFunction
         int Id,
         string CheckInDate,
         int? StepsWalked,
+        int? WaterMl,
         bool FollowedNutrition,
         bool FollowedExercise,
         string? Notes);
@@ -311,7 +313,15 @@ public sealed class GoalsFunction
         GoalPlanCheckInRequest? body;
         try
         {
-            body = await request.ReadFromJsonAsync<GoalPlanCheckInRequest>(cancellationToken);
+            using var json = await JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken);
+            var root = json.RootElement;
+            body = new GoalPlanCheckInRequest(
+                root.TryGetProperty("checkInDate", out var checkInDateNode) && checkInDateNode.ValueKind != JsonValueKind.Null ? checkInDateNode.GetString() : null,
+                root.TryGetProperty("stepsWalked", out var stepsNode) && stepsNode.ValueKind != JsonValueKind.Null ? stepsNode.GetInt32() : null,
+                root.TryGetProperty("waterMl", out var waterNode) && waterNode.ValueKind != JsonValueKind.Null ? waterNode.GetInt32() : null,
+                root.TryGetProperty("followedNutrition", out var nutritionNode) && nutritionNode.ValueKind != JsonValueKind.Null ? nutritionNode.GetBoolean() : false,
+                root.TryGetProperty("followedExercise", out var exerciseNode) && exerciseNode.ValueKind != JsonValueKind.Null ? exerciseNode.GetBoolean() : false,
+                root.TryGetProperty("notes", out var notesNode) && notesNode.ValueKind != JsonValueKind.Null ? notesNode.GetString() : null);
         }
         catch (Exception ex)
         {
@@ -347,6 +357,7 @@ public sealed class GoalsFunction
         }
 
         checkIn.StepsWalked = body.StepsWalked;
+        checkIn.WaterMl = body.WaterMl;
         checkIn.FollowedNutrition = body.FollowedNutrition;
         checkIn.FollowedExercise = body.FollowedExercise;
         checkIn.Notes = body.Notes;
@@ -358,6 +369,7 @@ public sealed class GoalsFunction
             checkIn.Id,
             checkIn.CheckInDate.ToString("yyyy-MM-dd"),
             checkIn.StepsWalked,
+            checkIn.WaterMl,
             checkIn.FollowedNutrition,
             checkIn.FollowedExercise,
             checkIn.Notes));
@@ -389,7 +401,7 @@ public sealed class GoalsFunction
             .Where(c => c.GoalPlanId == planId && c.CheckInDate >= since)
             .OrderByDescending(c => c.CheckInDate)
             .Select(c => new GoalPlanCheckInResponse(
-                c.Id, c.CheckInDate.ToString("yyyy-MM-dd"), c.StepsWalked, c.FollowedNutrition, c.FollowedExercise, c.Notes))
+                c.Id, c.CheckInDate.ToString("yyyy-MM-dd"), c.StepsWalked, c.WaterMl, c.FollowedNutrition, c.FollowedExercise, c.Notes))
             .ToListAsync(cancellationToken);
 
         return await FunctionResponseFactory.SuccessResponseAsync(request, new { checkIns });

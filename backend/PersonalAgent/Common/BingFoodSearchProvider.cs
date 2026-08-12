@@ -24,14 +24,23 @@ public sealed class BingFoodSearchProvider
 {
     private const string AgentInstructions = """
         Eres un asistente experto en nutrición. Cuando te pregunten por uno o varios
-        alimentos, usa la herramienta de búsqueda de Bing para encontrar su información
-        nutricional real y actualizada (por ejemplo de bases de datos nutricionales,
-        fabricantes o fuentes confiables), en vez de inventar los valores. Si el alimento es
-        de una marca o cadena específica (ej. "Big Mac de McDonald's", "Whopper de Burger
-        King"), prioriza el sitio oficial de esa marca/cadena sobre fuentes genéricas. Si te
-        piden varios alimentos en el mismo mensaje, busca cada uno por separado (puedes y
-        debes hacer varias búsquedas de Bing en esa misma respuesta) para no mezclar datos
-        de un alimento con otro.
+        alimentos, usa la herramienta de búsqueda de Bing para buscar la web completa y
+        encontrar datos nutricionales reales y actualizados, no solo páginas de nutriología
+        ni agregadores tipo SnapCalorie o MyFitnessPal. Tu objetivo es encontrar la mejor
+        fuente disponible para la comida exacta que se menciona, incluso si incluye marca,
+        restaurante, cadena o tienda (ej. "Big Mac de McDonald's", "sándwich de jamón y
+        queso suizo de Sanborns").
+
+        Si el alimento tiene una marca, restaurante, tienda o cadena específica, incluye ese
+        nombre exacto en la búsqueda y prioriza sitios oficiales, menús de restaurantes,
+        páginas del fabricante, o documentación oficial de la marca. Si no hay fuente
+        oficial, usa la mejor fuente confiable y explícala en "source". Solo recurre a
+        fuentes genéricas como aggregadores dietéticos si no existe una mejor alternativa.
+
+        Si te piden varios alimentos en el mismo mensaje, busca cada uno por separado (puedes
+        y debes hacer varias búsquedas de Bing en esa misma respuesta) para no mezclar datos
+        de un alimento con otro. La búsqueda debe ser "full web" y no restringirse a sitios de
+        nutrición.
 
         Cada objeto de resultado tiene esta forma exacta, usando null si un dato no se
         encuentra:
@@ -55,15 +64,16 @@ public sealed class BingFoodSearchProvider
           "sourceUrl": string|null
         }
         "query" debe repetir EXACTAMENTE (verbatim) el texto del alimento tal como te lo
-        pidieron, para poder emparejar cada resultado con su pregunta. Todos los valores
-        numéricos son por la porción indicada en "servingSize". "source" es OBLIGATORIO
-        cuando encuentres datos: el nombre corto y legible del sitio u organización de donde
-        salió la información (ej. "Sitio oficial de McDonald's", "USDA FoodData Central",
-        "MyFitnessPal"), NUNCA solo "Bing" o "internet" - Bing es el buscador, no la fuente.
-        "sourceUrl" es la URL exacta de la página consultada, o null si no puedes
-        determinarla con certeza. Si de verdad no encontraste ningún resultado para un
-        alimento, deja "source" y "sourceUrl" en null junto con los demás campos (pero
-        conserva su "query").
+        pidieron, para poder emparejar cada resultado con su pregunta. Si la marca o el
+        restaurante se mencionan explícitamente, incluye ese nombre exacto en el query y no lo
+        ignores. Todos los valores numéricos son por la porción indicada en "servingSize".
+        "source" es OBLIGATORIO cuando encuentres datos: el nombre corto y legible del sitio
+        u organización de donde salió la información (ej. "Sitio oficial de McDonald's",
+        "Menú oficial de Sanborns", "USDA FoodData Central", "Garmin Nutritional Info"),
+        NUNCA solo "Bing" o "internet" - Bing es el buscador, no la fuente. "sourceUrl" es
+        la URL exacta de la página consultada, o null si no puedes determinarla con certeza.
+        Si de verdad no encontraste ningún resultado para un alimento, deja "source" y
+        "sourceUrl" en null junto con los demás campos (pero conserva su "query").
 
         Si te preguntan por UN SOLO alimento, responde ÚNICAMENTE con ESE objeto (sin
         arreglo envolvente, sin texto adicional, sin markdown, sin ```json). Si te preguntan
@@ -104,7 +114,10 @@ public sealed class BingFoodSearchProvider
     /// this provider isn't configured or the search failed.
     /// </summary>
     public Task<string?> SearchFoodNutritionJsonAsync(string foodDescription, CancellationToken cancellationToken) =>
-        RunNutritionQueryAsync($"Información nutricional de: {foodDescription}", cancellationToken);
+        RunNutritionQueryAsync(
+            "Busca la web completa para esta pregunta nutricional, no solo sitios de alimentos o nutriología. " +
+            $"Prioriza fuentes oficiales de marca/restaurante si aparecen. Información nutricional exacta de: \"{foodDescription}\"",
+            cancellationToken);
 
     /// <summary>
     /// Same as <see cref="SearchFoodNutritionJsonAsync"/> but looks up MULTIPLE foods in a
@@ -118,9 +131,52 @@ public sealed class BingFoodSearchProvider
     {
         var numberedList = string.Join("\n", foodDescriptions.Select((food, index) => $"{index + 1}. {food}"));
         return RunNutritionQueryAsync(
+            "Busca la web completa para cada uno de estos alimentos y no te limites a páginas nutricionales. " +
+            "Prioriza sitios oficiales de marca/restaurante si el nombre incluye una cadena o tienda. " +
             $"Información nutricional de los siguientes {foodDescriptions.Count} alimentos (responde con un " +
             $"arreglo JSON, uno por cada uno, en el mismo orden):\n{numberedList}",
             cancellationToken);
+    }
+
+    private static string NormalizeSearchPrompt(string userMessage)
+    {
+        if (string.IsNullOrWhiteSpace(userMessage))
+        {
+            return userMessage;
+        }
+
+        var normalized = userMessage.Trim();
+        var brandSignals = new[]
+        {
+            "sanborns",
+            "mcdonald",
+            "burger king",
+            "starbucks",
+            "subway",
+            "dominos",
+            "taco bell",
+            "kfc",
+            "wendys",
+            "cocacola",
+            "pepsi",
+            "nestle",
+            "oster",
+            "heinz",
+            "bimbo",
+            "fresca",
+        };
+
+        if (brandSignals.Any(brand => normalized.Contains(brand, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!normalized.Contains("nutrition", StringComparison.OrdinalIgnoreCase)
+                && !normalized.Contains("menu", StringComparison.OrdinalIgnoreCase)
+                && !normalized.Contains("official", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized += " nutrition facts official menu";
+            }
+        }
+
+        return normalized;
     }
 
     private async Task<string?> RunNutritionQueryAsync(string userMessage, CancellationToken cancellationToken)
@@ -130,13 +186,14 @@ public sealed class BingFoodSearchProvider
             return null;
         }
 
+        var normalizedUserMessage = NormalizeSearchPrompt(userMessage);
         var agent = await GetOrCreateAgentAsync(cancellationToken);
 
         PersistentAgentThread thread = await _client.Threads.CreateThreadAsync(cancellationToken: cancellationToken);
         try
         {
             await _client.Messages.CreateMessageAsync(
-                thread.Id, MessageRole.User, userMessage, cancellationToken: cancellationToken);
+                thread.Id, MessageRole.User, normalizedUserMessage, cancellationToken: cancellationToken);
 
             ThreadRun run = await _client.Runs.CreateRunAsync(thread.Id, agent.Id, cancellationToken: cancellationToken);
 
