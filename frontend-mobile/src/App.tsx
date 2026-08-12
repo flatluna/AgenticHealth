@@ -97,7 +97,7 @@ function AppShell() {
       <SideNav />
       <div className="flex min-h-0 flex-1 flex-col w-full">
         <AppHeader />
-        <div className="min-h-0 flex-1 w-full">
+        <div className="min-h-0 flex-1 w-full pb-28 lg:pb-0">
           <Outlet />
         </div>
         <BottomNav />
