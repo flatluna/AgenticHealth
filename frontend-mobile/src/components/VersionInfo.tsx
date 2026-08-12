@@ -4,7 +4,7 @@
  */
 export function VersionInfo() {
   const buildDate = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : new Date().toISOString();
-  const version = '1.05';
+  const version = '1.10';
 
   const formatDate = (isoString: string) => {
     try {
