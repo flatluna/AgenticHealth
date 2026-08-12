@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { MessageCircle, Utensils, Dumbbell, Scale, Target, Wallet, PiggyBank, GraduationCap, Heart, Package } from 'lucide-react';
+import { MessageCircle, Utensils, Dumbbell, Scale, Target, Wallet, PiggyBank, GraduationCap, Heart, Package, BarChart3 } from 'lucide-react';
 
 export interface DomainTab {
   path: string;
@@ -32,7 +32,9 @@ export const DOMAINS: Domain[] = [
     tabs: [
       { path: '/', label: 'Agente', icon: MessageCircle, end: true },
       { path: '/nutricion', label: 'Nutrición', icon: Utensils },
+      { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
       { path: '/productos', label: 'Productos', icon: Package },
+      { path: '/catalogo-ejercicios', label: 'Catálogo Ejercicios', icon: Dumbbell },
       { path: '/ejercicio', label: 'Ejercicio', icon: Dumbbell },
       { path: '/peso', label: 'Peso', icon: Scale },
       { path: '/metas', label: 'Metas', icon: Target },

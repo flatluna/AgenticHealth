@@ -54,12 +54,12 @@ export async function askAgent(message: string, sessionId: string | null, userNa
 }
 
 /**
- * Searches for food nutrition by a specific source (catalog, edamam, or internet).
- * Called when user clicks one of the 3 search mode buttons.
+ * Searches for food nutrition by a specific source (catalog or internet).
+ * Called when the user clicks a source-specific search button.
  */
 export async function searchFoodBySource(
   message: string,
-  source: 'catalog' | 'global' | 'edamam' | 'internet',
+  source: 'catalog' | 'global' | 'internet',
 ): Promise<AskResponse> {
   const { data } = await apiClient.post<AskResponse>(
     '/foods/search-source-direct',

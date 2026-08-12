@@ -63,6 +63,7 @@ export interface GoalPlanCheckIn {
   id: number;
   checkInDate: string; // yyyy-MM-dd
   stepsWalked: number | null;
+  waterMl: number | null;
   followedNutrition: boolean;
   followedExercise: boolean;
   notes: string | null;
@@ -109,6 +110,7 @@ export async function saveGoalPlanCheckIn(
   checkIn: {
     checkInDate?: string; // defaults to today (server-side) if omitted
     stepsWalked: number | null;
+    waterMl?: number | null;
     followedNutrition: boolean;
     followedExercise: boolean;
     notes?: string;

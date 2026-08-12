@@ -1,26 +1,35 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Loader2, AlertCircle, CheckCircle2, Circle, Footprints, Plus, Trash2, Sparkles, Check, X, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ChevronLeft, ChevronRight, Circle, CheckCircle2, Droplets, Footprints, Loader2, Trash2 } from 'lucide-react';
 import { getLatestGoalPlan, saveGoalPlanCheckIn, getGoalPlanCheckInHistory, type GoalPlanCheckIn } from '../api/goalsApi';
-import {
-  getExerciseHistory,
-  logExercise,
-  deleteExerciseEntry,
-  estimateExercise,
-  getPersonalExerciseCatalog,
-  saveCustomExercise,
-  logPersonalExercise,
-  deletePersonalExercise,
-  type ExerciseEntry,
-  type ExerciseEstimate,
-  type PersonalExercise,
-} from '../api/exerciseApi';
+import { getExerciseHistory, deleteExerciseEntry, type ExerciseEntry } from '../api/exerciseApi';
 
 const CENTRAL_TIME_ZONE = 'America/Chicago';
-const EXERCISE_TYPES = ['Pesas', 'Correr/Trotar', 'Nadar', 'Ciclismo', 'Caminar', 'Yoga/Estiramiento', 'Otro'] as const;
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.toDateString() === b.toDateString();
+}
 
 function todayIso(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: CENTRAL_TIME_ZONE }).format(new Date());
 }
+
+const dateLabelFormatter = new Intl.DateTimeFormat('es', {
+  day: 'numeric',
+  month: 'long',
+  timeZone: CENTRAL_TIME_ZONE,
+});
 
 const dateTimeFormatter = new Intl.DateTimeFormat('es', {
   day: 'numeric',
@@ -49,8 +58,37 @@ function computeStreak(checkIns: GoalPlanCheckIn[]): number {
 }
 
 export function ExercisePage() {
+  const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
+  const [entries, setEntries] = useState<ExerciseEntry[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [planId, setPlanId] = useState<number | null>(null);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
+
+  const dayEntries = useMemo(
+    () => entries.filter((entry) => isSameDay(new Date(entry.recordedAtUtc), anchorDate)),
+    [entries, anchorDate],
+  );
+
+  const loadEntries = async () => {
+    const daysBack = Math.max(1, Math.ceil((startOfDay(new Date()).getTime() - anchorDate.getTime()) / 86400000) + 2);
+    const result = await getExerciseHistory(daysBack);
+    setEntries(result.entries);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setSaveError(null);
+    loadEntries()
+      .catch(() => {
+        if (!cancelled) {
+          setSaveError('No se pudo cargar la información de ejercicio.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [anchorDate]);
 
   useEffect(() => {
     (async () => {
@@ -58,518 +96,112 @@ export function ExercisePage() {
         const latest = await getLatestGoalPlan();
         setPlanId(latest.planId);
       } catch {
-        // Silent - the page still works without a plan.
+        // no plan yet; this page still works without it
       } finally {
         setIsLoadingPlan(false);
       }
     })();
   }, []);
 
-  return (
-    <div className="h-full overflow-y-auto bg-[var(--app-bg)] px-3 sm:px-4 py-4">
-      <h1 className="text-sm sm:text-base font-semibold text-[var(--text-primary)]">Ejercicio</h1>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">Registra tu actividad y sigue tu racha diaria.</p>
-
-      <ExerciseLogSection />
-
-      {isLoadingPlan ? (
-        <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-        </div>
-      ) : planId != null ? (
-        <PlanCheckInTracker planId={planId} />
-      ) : (
-        <p className="mt-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 text-sm text-[var(--text-muted)]">
-          Crea un plan en Metas para activar tu seguimiento diario.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ExerciseLogSection() {
-  const [entries, setEntries] = useState<ExerciseEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [mode, setMode] = useState<'preset' | 'custom'>('preset');
-
-  const [exerciseType, setExerciseType] = useState<(typeof EXERCISE_TYPES)[number]>('Pesas');
-  const [customType, setCustomType] = useState('');
-  const [durationInput, setDurationInput] = useState('');
-  const [caloriesInput, setCaloriesInput] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    getExerciseHistory(30)
-      .then((data) => {
-        if (cancelled) return;
-        setEntries(data.entries);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setError('No se pudo cargar el historial de ejercicio.');
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
-
-  const handleSave = async (e: FormEvent) => {
-    e.preventDefault();
-    const description = exerciseType === 'Otro' ? customType.trim() : exerciseType;
-    const durationMinutes = Number(durationInput);
-    if (!description) {
-      setSaveError('Escribe el tipo de ejercicio.');
-      return;
-    }
-    if (!durationInput.trim() || Number.isNaN(durationMinutes) || durationMinutes <= 0) {
-      setSaveError('Ingresa una duración válida en minutos.');
-      return;
-    }
-    const caloriesBurned = caloriesInput.trim() ? Number(caloriesInput) : null;
-    if (caloriesBurned != null && (Number.isNaN(caloriesBurned) || caloriesBurned < 0)) {
-      setSaveError('Ingresa calorías válidas.');
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      await logExercise(description, durationMinutes, caloriesBurned);
-      setCustomType('');
-      setDurationInput('');
-      setCaloriesInput('');
-      setRefreshKey((k) => k + 1);
-    } catch {
-      setSaveError('No se pudo guardar el ejercicio.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleDelete = async (id: number) => {
     try {
       await deleteExerciseEntry(id);
-      setRefreshKey((k) => k + 1);
+      await loadEntries();
     } catch {
-      setError('No se pudo borrar el registro.');
+      setSaveError('No se pudo borrar este registro.');
     }
   };
+
+  const dateLabel = useMemo(() => {
+    const label = dateLabelFormatter.format(anchorDate);
+    return isSameDay(anchorDate, new Date()) ? `Hoy · ${label}` : label;
+  }, [anchorDate]);
 
   return (
-    <div className="mt-4 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-[var(--text-secondary)]">Registrar ejercicio</h2>
-
-      <div className="mt-3 grid grid-cols-2 gap-1.5">
-        <button
-          type="button"
-          onClick={() => setMode('preset')}
-          className={`rounded-lg border px-2 py-1.5 text-xs font-medium ${
-            mode === 'preset'
-              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
-              : 'border-[var(--card-border)] text-[var(--text-secondary)]'
-          }`}
-        >
-          Tipo predefinido
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('custom')}
-          className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium ${
-            mode === 'custom'
-              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
-              : 'border-[var(--card-border)] text-[var(--text-secondary)]'
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          Crea tu propio ejercicio
-        </button>
-      </div>
-
-      {mode === 'preset' ? (
-        <form onSubmit={handleSave} className="mt-3 flex flex-col gap-3">
-          <label className="text-sm text-[var(--text-secondary)]">
-            Tipo
-            <select
-              value={exerciseType}
-              onChange={(e) => setExerciseType(e.target.value as (typeof EXERCISE_TYPES)[number])}
-              className="mt-1 block w-full rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-            >
-              {EXERCISE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </label>
-          {exerciseType === 'Otro' && (
-            <label className="text-sm text-[var(--text-secondary)]">
-              Especifica
-              <input
-                type="text"
-                value={customType}
-                onChange={(e) => setCustomType(e.target.value)}
-                placeholder="Ej. Boxeo"
-                className="mt-1 block w-full rounded-lg border border-[var(--input-border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-              />
-            </label>
-          )}
-          <div className="flex gap-3">
-            <label className="flex-1 text-sm text-[var(--text-secondary)]">
-              Duración (min)
-              <input
-                type="number"
-                min={1}
-                value={durationInput}
-                onChange={(e) => setDurationInput(e.target.value)}
-                placeholder="30"
-                className="mt-1 block w-full rounded-lg border border-[var(--input-border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-              />
-            </label>
-            <label className="flex-1 text-sm text-[var(--text-secondary)]">
-              Calorías (opc.)
-              <input
-                type="number"
-                min={0}
-                value={caloriesInput}
-                onChange={(e) => setCaloriesInput(e.target.value)}
-                placeholder="200"
-                className="mt-1 block w-full rounded-lg border border-[var(--input-border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-              />
-            </label>
+    <div className="h-full overflow-y-auto bg-[var(--app-bg)] px-3 py-4 sm:px-4">
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setAnchorDate((prev) => addDays(prev, -1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--card-border)] text-[var(--text-secondary)]"
+            aria-label="Día anterior"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Ejercicio</p>
+            <p className="mt-1 text-sm font-semibold text-[var(--text-primary)] capitalize">{dateLabel}</p>
           </div>
           <button
-            type="submit"
-            disabled={isSaving}
-            className="flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            type="button"
+            onClick={() => setAnchorDate((prev) => addDays(prev, 1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--card-border)] text-[var(--text-secondary)]"
+            aria-label="Día siguiente"
           >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Guardar
+            <ChevronRight className="h-4 w-4" />
           </button>
-        </form>
-      ) : (
-        <CustomExerciseForm onLogged={() => setRefreshKey((k) => k + 1)} />
-      )}
-
-      {saveError && mode === 'preset' && (
-        <div className="mt-2 flex items-center gap-1.5 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" /> {saveError}
-        </div>
-      )}
-      {error && (
-        <div className="mt-2 flex items-center gap-1.5 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" /> {error}
-        </div>
-      )}
-
-      <PersonalExerciseCatalogList refreshKey={refreshKey} onLogged={() => setRefreshKey((k) => k + 1)} />
-
-      {isLoading ? (
-        <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-        </div>
-      ) : entries.length === 0 ? (
-        <p className="mt-4 text-sm text-[var(--text-muted)]">Aún no tienes ejercicios registrados.</p>
-      ) : (
-        <div className="mt-4 space-y-2">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-center justify-between rounded-lg border border-[var(--card-border)] bg-[var(--app-bg)] px-3 py-2"
-            >
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-[var(--text-secondary)]">{entry.description}</span>
-                <span className="text-xs text-[var(--text-muted)]">{dateTimeFormatter.format(new Date(entry.recordedAtUtc))}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {entry.durationMinutes} min{entry.caloriesBurned != null ? ` · ${entry.caloriesBurned} kcal` : ''}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(entry.id)}
-                  className="rounded p-1 text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-600"
-                  aria-label="Borrar registro"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** "Crea tu propio ejercicio": describe any activity in free text, the AI estimates
- * calories burned (and suggests a name) as a preview, and it's only added to today's
- * exercise log if the user explicitly accepts it. */
-function CustomExerciseForm({ onLogged }: { onLogged: () => void }) {
-  const [description, setDescription] = useState('');
-  const [durationInput, setDurationInput] = useState('');
-  const [isEstimating, setIsEstimating] = useState(false);
-  const [estimateError, setEstimateError] = useState<string | null>(null);
-  const [estimate, setEstimate] = useState<ExerciseEstimate | null>(null);
-  const [nameInput, setNameInput] = useState('');
-  const [caloriesInput, setCaloriesInput] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const handleEstimate = async (e: FormEvent) => {
-    e.preventDefault();
-    const durationMinutes = Number(durationInput);
-    if (!description.trim()) {
-      setEstimateError('Describe qué ejercicio hiciste.');
-      return;
-    }
-    if (!durationInput.trim() || Number.isNaN(durationMinutes) || durationMinutes <= 0) {
-      setEstimateError('Ingresa una duración válida en minutos.');
-      return;
-    }
-
-    setIsEstimating(true);
-    setEstimateError(null);
-    try {
-      const result = await estimateExercise(description.trim(), durationMinutes);
-      setEstimate(result);
-      setNameInput(result.suggestedName);
-      setCaloriesInput(String(Math.round(result.estimatedCaloriesBurned)));
-    } catch {
-      setEstimateError('No se pudo calcular las calorías. Intenta de nuevo.');
-    } finally {
-      setIsEstimating(false);
-    }
-  };
-
-  const handleAccept = async () => {
-    const durationMinutes = Number(durationInput);
-    const caloriesBurned = caloriesInput.trim() ? Number(caloriesInput) : null;
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      await saveCustomExercise(nameInput.trim() || description.trim(), durationMinutes, caloriesBurned);
-      setDescription('');
-      setDurationInput('');
-      setEstimate(null);
-      setNameInput('');
-      setCaloriesInput('');
-      onLogged();
-    } catch {
-      setSaveError('No se pudo guardar el ejercicio.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (estimate) {
-    return (
-      <div className="mt-3 rounded-xl border border-[var(--card-border)] bg-[var(--app-bg)] p-3">
-        <p className="mb-2 text-xs text-[var(--text-muted)]">Revisa y ajusta si quieres antes de agregarlo:</p>
-        <label className="mb-2 block text-sm text-[var(--text-secondary)]">
-          Nombre
-          <input
-            type="text"
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-          />
-        </label>
-        <div className="flex gap-3">
-          <label className="flex-1 text-sm text-[var(--text-secondary)]">
-            Duración (min)
-            <input
-              type="number"
-              min={1}
-              value={durationInput}
-              onChange={(e) => setDurationInput(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-            />
-          </label>
-          <label className="flex-1 text-sm text-[var(--text-secondary)]">
-            Calorías (IA)
-            <input
-              type="number"
-              min={0}
-              value={caloriesInput}
-              onChange={(e) => setCaloriesInput(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-            />
-          </label>
         </div>
 
         {saveError && (
-          <div className="mt-2 flex items-center gap-1.5 text-sm text-red-600">
+          <div className="mt-4 flex items-center gap-1.5 text-sm text-red-600">
             <AlertCircle className="h-4 w-4 shrink-0" /> {saveError}
           </div>
         )}
 
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setEstimate(null)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[var(--card-border)] py-2 text-sm font-medium text-[var(--text-secondary)]"
-          >
-            <X className="h-4 w-4" />
-            Descartar
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleAccept()}
-            disabled={isSaving}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[var(--accent)] py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Agregar a mi día
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleEstimate} className="mt-3 flex flex-col gap-3">
-      <label className="text-sm text-[var(--text-secondary)]">
-        Describe tu ejercicio
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Ej. Caminé 40 minutos por el parque"
-          className="mt-1 block w-full rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-        />
-      </label>
-      <label className="text-sm text-[var(--text-secondary)]">
-        Duración (min)
-        <input
-          type="number"
-          min={1}
-          value={durationInput}
-          onChange={(e) => setDurationInput(e.target.value)}
-          placeholder="40"
-          className="mt-1 block w-full rounded-lg border border-[var(--input-border)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-        />
-      </label>
-      {estimateError && (
-        <div className="flex items-center gap-1.5 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" /> {estimateError}
-        </div>
-      )}
-      <button
-        type="submit"
-        disabled={isEstimating}
-        className="flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] py-2.5 text-sm font-medium text-white disabled:opacity-50"
-      >
-        {isEstimating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-        Calcular calorías con IA
-      </button>
-    </form>
-  );
-}
-
-function PersonalExerciseCatalogList({ refreshKey, onLogged }: { refreshKey: number; onLogged: () => void }) {
-  const [items, setItems] = useState<PersonalExercise[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [loggingId, setLoggingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  const reload = async () => {
-    try {
-      const data = await getPersonalExerciseCatalog();
-      setItems(data);
-      setError(null);
-    } catch {
-      setError('No se pudo cargar tu catálogo de ejercicios.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setIsLoading(true);
-    void reload();
-  }, [refreshKey]);
-
-  const handleQuickLog = async (id: number) => {
-    setLoggingId(id);
-    try {
-      await logPersonalExercise(id);
-      onLogged();
-    } catch {
-      setError('No se pudo registrar el ejercicio.');
-    } finally {
-      setLoggingId(null);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    setDeletingId(id);
-    try {
-      await deletePersonalExercise(id);
-      await reload();
-    } catch {
-      setError('No se pudo eliminar el ejercicio.');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  if (isLoading || items.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mt-4 border-t border-[var(--card-border)] pt-3">
-      <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Mis ejercicios guardados</p>
-      {error && (
-        <div className="mb-2 flex items-center gap-1.5 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" /> {error}
-        </div>
-      )}
-      <div className="flex flex-col gap-2">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--app-bg)] px-3 py-2"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{item.name}</p>
-              <p className="text-xs text-[var(--text-muted)]">
-                {item.durationMinutes} min{item.caloriesBurned != null ? ` · ${Math.round(item.caloriesBurned)} kcal` : ''}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => void handleQuickLog(item.id)}
-                disabled={loggingId === item.id}
-                className="flex items-center gap-1 rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-              >
-                {loggingId === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                Agregar
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDelete(item.id)}
-                disabled={deletingId === item.id}
-                aria-label="Eliminar de mi catálogo"
-                className="flex items-center justify-center rounded-full border border-[var(--card-border)] p-1.5 text-[var(--text-muted)] disabled:opacity-60"
-              >
-                {deletingId === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </button>
+        <div className="mt-4 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-[var(--text-secondary)]">Ejercicios del día</h2>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-[var(--app-bg)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)]">
+                {dayEntries.reduce((sum, item) => sum + item.durationMinutes, 0)} min
+              </span>
+              <span className="rounded-full bg-[var(--app-bg)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)]">
+                {Math.round(dayEntries.reduce((sum, item) => sum + (item.caloriesBurned ?? 0), 0))} kcal
+              </span>
             </div>
           </div>
-        ))}
+
+          {dayEntries.length === 0 ? (
+            <p className="mt-3 text-sm text-[var(--text-muted)]">Aún no hay ejercicios agregados para esta fecha.</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {dayEntries.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--app-bg)] px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[var(--text-primary)]">{entry.description}</p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {dateTimeFormatter.format(new Date(entry.recordedAtUtc))}
+                      {entry.caloriesBurned != null ? ` · ${Math.round(entry.caloriesBurned)} kcal` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(entry.id)}
+                    className="rounded p-1 text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-600"
+                    aria-label="Eliminar ejercicio del día"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {isLoadingPlan ? (
+          <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-muted)]">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+          </div>
+        ) : planId != null ? (
+          <PlanCheckInTracker planId={planId} />
+        ) : (
+          <p className="mt-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 text-sm text-[var(--text-muted)]">
+            Crea un plan en Metas para activar tu seguimiento diario.
+          </p>
+        )}
       </div>
+
     </div>
   );
 }
@@ -580,6 +212,7 @@ function PlanCheckInTracker({ planId }: { planId: number }) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stepsWalked, setStepsWalked] = useState('');
+  const [waterMl, setWaterMl] = useState(0);
   const [followedNutrition, setFollowedNutrition] = useState(false);
   const [followedExercise, setFollowedExercise] = useState(false);
   const [notes, setNotes] = useState('');
@@ -593,12 +226,13 @@ function PlanCheckInTracker({ planId }: { planId: number }) {
         const today = checkIns.find((c) => c.checkInDate === todayIso());
         if (today) {
           setStepsWalked(today.stepsWalked != null ? String(today.stepsWalked) : '');
+          setWaterMl(today.waterMl ?? 0);
           setFollowedNutrition(today.followedNutrition);
           setFollowedExercise(today.followedExercise);
           setNotes(today.notes ?? '');
         }
       } catch {
-        // Silent - tracker is a nice-to-have.
+        // no extra UI required if the tracker cannot load
       } finally {
         setIsLoading(false);
       }
@@ -614,10 +248,12 @@ function PlanCheckInTracker({ planId }: { planId: number }) {
       const saved = await saveGoalPlanCheckIn(planId, {
         checkInDate: todayIso(),
         stepsWalked: stepsWalked.trim() ? Number(stepsWalked) : null,
+        waterMl,
         followedNutrition,
         followedExercise,
         notes: notes.trim() || undefined,
       });
+      setWaterMl(saved.waterMl ?? 0);
       setHistory((prev) => {
         const withoutToday = prev.filter((c) => c.checkInDate !== saved.checkInDate);
         return [saved, ...withoutToday].sort((a, b) => (a.checkInDate < b.checkInDate ? 1 : -1));
@@ -661,6 +297,48 @@ function PlanCheckInTracker({ planId }: { planId: number }) {
             className="ml-auto w-24 rounded-lg border border-[var(--input-border)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]"
           />
         </label>
+
+        <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-sky-700">
+              <Droplets className="h-4 w-4" />
+              Agua
+            </div>
+            <span className="text-xs font-semibold text-sky-700">{waterMl} ml</span>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setWaterMl((value) => Math.max(0, value - 500))}
+              className="rounded-lg border border-sky-300 bg-white px-2 py-1.5 text-xs font-semibold text-sky-700"
+            >
+              - 500 ml
+            </button>
+            <button
+              type="button"
+              onClick={() => setWaterMl((value) => value + 500)}
+              className="rounded-lg bg-sky-500 px-2 py-1.5 text-xs font-semibold text-white"
+            >
+              + 500 ml
+            </button>
+            <button
+              type="button"
+              onClick={() => setWaterMl((value) => Math.max(0, value - 250))}
+              className="rounded-lg border border-cyan-300 bg-white px-2 py-1.5 text-xs font-semibold text-cyan-700"
+            >
+              - 250 ml
+            </button>
+            <button
+              type="button"
+              onClick={() => setWaterMl((value) => value + 250)}
+              className="rounded-lg bg-cyan-500 px-2 py-1.5 text-xs font-semibold text-white"
+            >
+              + 250 ml
+            </button>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={() => setFollowedNutrition((v) => !v)}

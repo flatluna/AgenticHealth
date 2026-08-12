@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { Mic, LogOut, Camera, Loader2, Check, Plus, Package, Search, Globe, BookOpen } from 'lucide-react';
+import { Mic, LogOut, Camera, Loader2, Check, Plus, Package, Globe, BookOpen } from 'lucide-react';
 import { askAgent, getAgentProgress, logPendingMealToday, searchFoodBySource, savePendingMealAsProduct, type PendingMeal } from '../api/agentApi';
 import { extractFoodLabel, type FoodLabelExtractionResult } from '../api/foodLabelApi';
 import { FoodLabelReviewSheet } from './FoodLabelReviewSheet';
@@ -123,7 +123,7 @@ export function ChatPanel() {
     }
   };
 
-  const handleSearchBySource = async (source: 'catalog' | 'global' | 'edamam' | 'internet') => {
+  const handleSearchBySource = async (source: 'catalog' | 'global' | 'internet') => {
     // Behaves like pressing Enter with whatever's currently typed; only reuse the last sent
     // message when the input is empty (e.g. re-running the same question against another source).
     const query = (input.trim() || lastUserMessage.trim());
@@ -410,20 +410,6 @@ export function ChatPanel() {
           >
             <BookOpen className="h-3.5 w-3.5" />
             Catálogo
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSearchBySource('edamam')}
-            disabled={isLoading || (!lastUserMessage.trim() && !input.trim())}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-              isLoading
-                ? 'bg-green-500 text-white'
-                : 'border border-[var(--card-border)] text-[var(--text-primary)] hover:bg-[var(--hover-bg)]'
-            }`}
-            title="Buscar en Edamam"
-          >
-            <Search className="h-3.5 w-3.5" />
-            Edamam
           </button>
           <button
             type="button"

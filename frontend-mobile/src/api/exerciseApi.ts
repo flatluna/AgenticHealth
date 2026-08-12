@@ -77,10 +77,25 @@ export interface PersonalExercise {
   timesLogged: number;
 }
 
+export interface GlobalExercise {
+  id: number;
+  name: string;
+  defaultDurationMinutes: number;
+  defaultCaloriesBurned: number | null;
+  category: string | null;
+  timesUsed: number;
+  description: string | null;
+}
+
 /** Fetches THIS user's own saved custom exercises (personal catalog, not shared globally
  * like Productos), most-logged first. */
 export async function getPersonalExerciseCatalog(): Promise<PersonalExercise[]> {
   const { data } = await apiClient.get<PersonalExercise[]>('/exercise/catalog', { timeout: 15000 });
+  return data;
+}
+
+export async function getGlobalExerciseCatalog(): Promise<GlobalExercise[]> {
+  const { data } = await apiClient.get<GlobalExercise[]>('/exercise/global', { timeout: 15000 });
   return data;
 }
 
@@ -118,4 +133,34 @@ export async function logPersonalExercise(
 /** Removes a saved custom exercise from the user's own catalog (past logged entries are unaffected). */
 export async function deletePersonalExercise(id: number): Promise<void> {
   await apiClient.delete(`/exercise/catalog/${id}`, { timeout: 15000 });
+}
+
+export async function updatePersonalExercise(id: number, name: string, durationMinutes?: number, caloriesBurned?: number | null): Promise<void> {
+  await apiClient.put(`/exercise/catalog/${id}`, { name, durationMinutes, caloriesBurned }, { timeout: 15000 });
+}
+
+export async function saveGlobalExercise(
+  name: string,
+  defaultDurationMinutes?: number,
+  defaultCaloriesBurned?: number | null,
+  category?: string | null,
+  description?: string | null,
+): Promise<{ id: number }> {
+  const { data } = await apiClient.post<{ id: number }>('/exercise/global', { name, defaultDurationMinutes, defaultCaloriesBurned, category, description }, { timeout: 15000 });
+  return data;
+}
+
+export async function updateGlobalExercise(
+  id: number,
+  name: string,
+  defaultDurationMinutes?: number,
+  defaultCaloriesBurned?: number | null,
+  category?: string | null,
+  description?: string | null,
+): Promise<void> {
+  await apiClient.put(`/exercise/global/${id}`, { name, defaultDurationMinutes, defaultCaloriesBurned, category, description }, { timeout: 15000 });
+}
+
+export async function deleteGlobalExercise(id: number): Promise<void> {
+  await apiClient.delete(`/exercise/global/${id}`, { timeout: 15000 });
 }

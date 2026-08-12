@@ -10,9 +10,11 @@ import { VersionInfo } from './components/VersionInfo'
 import { NutritionPage } from './pages/NutritionPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ExercisePage } from './pages/ExercisePage'
+import { ExerciseCatalogPage } from './pages/ExerciseCatalogPage'
 import { WeightPage } from './pages/WeightPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { DashboardPage } from './pages/DashboardPage'
 import { useAuth } from './contexts/AuthContext'
 
 function LoadingScreen() {
@@ -111,7 +113,9 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <ChatScreen /> },
       { path: 'nutricion', element: <NutritionPage /> },
+      { path: 'dashboard', element: <DashboardPage /> },
       { path: 'productos', element: <ProductsPage /> },
+      { path: 'catalogo-ejercicios', element: <ExerciseCatalogPage /> },
       { path: 'ejercicio', element: <ExercisePage /> },
       { path: 'peso', element: <WeightPage /> },
       { path: 'metas', element: <GoalsPage /> },
