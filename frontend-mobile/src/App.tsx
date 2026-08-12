@@ -19,7 +19,7 @@ import { useAuth } from './contexts/AuthContext'
 
 function LoadingScreen() {
   return (
-    <div className="flex h-dvh items-center justify-center bg-[var(--app-bg)] text-[var(--text-primary)]">
+    <div className="flex h-screen items-center justify-center bg-[var(--app-bg)] text-[var(--text-primary)]">
       Cargando…
     </div>
   );
@@ -39,7 +39,7 @@ function LoginScreen() {
   });
 
   return (
-    <div className="flex h-dvh flex-col items-center justify-center gap-6 bg-gradient-to-br from-purple-600 via-fuchsia-600 to-indigo-700 px-6 text-center text-white">
+    <div className="flex h-screen flex-col items-center justify-center gap-6 bg-gradient-to-br from-purple-600 via-fuchsia-600 to-indigo-700 px-6 text-center text-white">
       <div className="absolute top-4 left-4 text-white/70 text-sm">
         {dateTime}
       </div>
@@ -93,11 +93,11 @@ function AppShell() {
   }
 
   return (
-    <div className="flex h-dvh w-dvw overflow-hidden bg-[var(--app-bg)]">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--app-bg)]">
       <SideNav />
-      <div className="flex min-h-0 flex-1 flex-col w-full">
+      <div className="flex min-h-0 w-full flex-1 flex-col">
         <AppHeader />
-        <div className="min-h-0 flex-1 w-full pb-28 lg:pb-0">
+        <div className="min-h-0 w-full flex-1 overflow-hidden pb-0 lg:pb-0">
           <Outlet />
         </div>
         <BottomNav />
