@@ -22,32 +22,32 @@ export function BottomNav() {
             type="button"
             disabled={!domain.enabled}
             onClick={() => navigate(domain.tabs[0].path)}
-            className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-medium transition-colors disabled:opacity-40 ${
+            className={`flex shrink-0 items-center justify-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium leading-none transition-colors disabled:opacity-40 ${
               domain.id === activeDomain.id
                 ? `${domain.accentBg} ${domain.accentText}`
                 : 'bg-[var(--app-bg)] text-[var(--text-muted)]'
             }`}
           >
-            <domain.icon className="h-3.5 w-3.5" />
-            {domain.label}
-            {!domain.enabled && ' · Próximamente'}
+            <domain.icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{domain.label}</span>
+            {!domain.enabled && <span className="hidden sm:inline">· Próximamente</span>}
           </button>
         ))}
       </div>
-      <nav className="flex">
+      <nav className="grid grid-cols-3 gap-1 px-1 pb-1">
         {activeDomain.tabs.map(({ path, label, icon: Icon, end }) => (
           <NavLink
             key={path}
             to={path}
             end={end}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+              `flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-medium leading-tight transition-colors ${
                 isActive ? 'text-[var(--accent-text)]' : 'text-[var(--text-muted)]'
               }`
             }
           >
-            <Icon className="h-5 w-5" />
-            {label}
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="max-w-full truncate text-center">{label}</span>
           </NavLink>
         ))}
       </nav>
