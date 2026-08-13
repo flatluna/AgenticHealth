@@ -8,7 +8,8 @@ const tenantId = import.meta.env.VITE_AZURE_TENANT_ID?.trim() ?? '0e9c8663-a4ff-
 const configuredAuthority = import.meta.env.VITE_AZURE_AUTHORITY?.trim() ?? `https://twinetwork.ciamlogin.com/${tenantId}/v2.0/`;
 const authority = configuredAuthority;
 
-const redirectUri = import.meta.env.VITE_AZURE_REDIRECT_URI?.trim() ?? 'http://localhost:5176/suite/login';
+const redirectUri = import.meta.env.VITE_AZURE_REDIRECT_URI?.trim() ??
+  (typeof window !== 'undefined' ? `${window.location.origin}/suite/login` : 'http://localhost:5176/suite/login');
 
 const isAuthorityValid = authority.length > 0 && authority.includes('.ciamlogin.com/') && authority.includes('/v2.0/');
 
